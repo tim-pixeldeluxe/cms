@@ -35,6 +35,7 @@ use craft\events\ElementEvent;
 use craft\events\ElementQueryEvent;
 use craft\events\MergeElementsEvent;
 use craft\events\RegisterComponentTypesEvent;
+use craft\events\ElementPropagateEvent;
 use craft\helpers\ArrayHelper;
 use craft\helpers\Component as ComponentHelper;
 use craft\helpers\DateTimeHelper;
@@ -1985,7 +1986,7 @@ class Elements extends Component
      */
     private function _propagateElement(ElementInterface $element, bool $isNewElement, array $siteInfo, ElementInterface $siteElement = null)
     {
-        $event = new ElementEvent([ 'element' => $element, ]);
+        $event = new ElementPropagateEvent([ 'element' => $element, ]);
 
         // Fire a 'propagateElements' event
         if ($this->hasEventHandlers(self::EVENT_PROPAGATE_ELEMENT)) {
