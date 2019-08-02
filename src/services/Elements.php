@@ -158,6 +158,11 @@ class Elements extends Component
     const EVENT_BEFORE_PROPAGATE_ELEMENT = 'beforePropagateElement';
 
     /**
+     * @event ElementEvent The event that is triggered when an element is propagated.
+     */
+    const EVENT_PROPAGATE_ELEMENT = 'propagateElement';
+
+    /**
      * @event BatchElementActionEvent The event that is triggered after an element is propagated.
      */
     const EVENT_AFTER_PROPAGATE_ELEMENT = 'afterPropagateElement';
@@ -1980,6 +1985,18 @@ class Elements extends Component
      */
     private function _propagateElement(ElementInterface $element, bool $isNewElement, array $siteInfo, ElementInterface $siteElement = null)
     {
+        $event = new ElementEvent([ 'element' => $element, ]);
+
+        // Fire a 'propagateElements' event
+        if ($this->hasEventHandlers(self::EVENT_PROPAGATE_ELEMENT)) {
+            $this->trigger(self::EVENT_PROPAGATE_ELEMENT, $event);
+        }
+
+        // Do not propagate if event isn't valid
+        if(!$event->isValid) {
+            return;
+        }
+
         /** @var Element $element */
         // Try to fetch the element in this site
         /** @var Element|null $siteElement */
