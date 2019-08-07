@@ -652,6 +652,8 @@ class Elements extends Component
 
             // Update the element across the other sites?
             if ($propagate) {
+                $element->newSiteIds = [];
+
                 foreach ($supportedSites as $siteInfo) {
                     // Skip the master site
                     if ($siteInfo['siteId'] != $element->siteId) {
@@ -851,6 +853,8 @@ class Elements extends Component
 
                 $e = null;
                 try {
+                    $element->newSiteIds = [];
+
                     foreach ($elementSiteIds as $siteId) {
                         if ($siteId != $element->siteId) {
                             // Make sure the site element wasn't updated more recently than the main one
@@ -2011,6 +2015,9 @@ class Elements extends Component
             $siteElement->siteId = $siteInfo['siteId'];
             $siteElement->contentId = null;
             $siteElement->enabledForSite = $siteInfo['enabledByDefault'];
+
+            // Keep track of this new site ID
+            $element->newSiteIds[] = $siteInfo['siteId'];
         } else if ($element->propagateAll) {
             $oldSiteElement = $siteElement;
             $siteElement = clone $element;
