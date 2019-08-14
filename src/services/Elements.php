@@ -1315,7 +1315,7 @@ class Elements extends Component
      * @return bool Whether the element was deleted successfully
      * @throws \Throwable
      */
-    public function deleteElementById(int $elementId, string $elementType = null, int $siteId = null, $hardDelete = false): bool
+    public function deleteElementById(int $elementId, string $elementType = null, int $siteId = null, bool $hardDelete = false): bool
     {
         /** @var ElementInterface|string|null $elementType */
         if ($elementType === null) {
@@ -1357,7 +1357,7 @@ class Elements extends Component
      * @return bool Whether the element was deleted successfully
      * @throws \Throwable
      */
-    public function deleteElement(ElementInterface $element, $hardDelete = false): bool
+    public function deleteElement(ElementInterface $element, bool $hardDelete = false): bool
     {
         /** @var Element $element */
         // Fire a 'beforeDeleteElement' event
