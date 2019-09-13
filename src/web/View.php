@@ -29,6 +29,7 @@ use Twig\Extension\CoreExtension;
 use Twig\Extension\DebugExtension;
 use Twig\Extension\ExtensionInterface;
 use Twig\Extension\StringLoaderExtension;
+use Twig\Template as TwigTemplate;
 use yii\base\Arrayable;
 use yii\base\Exception;
 use yii\base\Model;
@@ -338,7 +339,6 @@ class View extends \yii\web\View
         // Render and return
         $renderingTemplate = $this->_renderingTemplate;
         $this->_renderingTemplate = $template;
-        Craft::beginProfile($template, __METHOD__);
 
         try {
             $output = $this->getTwig()->render($template, $variables);
@@ -350,7 +350,6 @@ class View extends \yii\web\View
             throw $e;
         }
 
-        Craft::endProfile($template, __METHOD__);
         $this->_renderingTemplate = $renderingTemplate;
 
         $this->afterRenderTemplate($template, $variables, $output);
@@ -448,13 +447,38 @@ class View extends \yii\web\View
      */
     public function renderString(string $template, array $variables = []): string
     {
+        // If there are no dynamic tags, just return the template
+        if (strpos($template, '{') === false) {
+            return $template;
+        }
+
+        $templateMode = $this->templateMode;
+        $this->setTemplateMode(self::TEMPLATE_MODE_SITE);
+
         $twig = $this->getTwig();
         $twig->setDefaultEscaperStrategy(false);
         $lastRenderingTemplate = $this->_renderingTemplate;
         $this->_renderingTemplate = 'string:' . $template;
-        $result = $twig->createTemplate($template)->render($variables);
+
+        $e = null;
+        try {
+            $result = $twig->createTemplate($template)->render($variables);
+        } catch (\Throwable $e) {
+            // throw it later
+        }
+
         $this->_renderingTemplate = $lastRenderingTemplate;
         $twig->setDefaultEscaperStrategy();
+        $this->setTemplateMode($templateMode);
+
+        if ($e !== null) {
+            if (!YII_DEBUG) {
+                // Throw a generic exception instead
+                throw new Exception('An error occurred when rendering a template.', 0, $e);
+            }
+            throw $e;
+        }
+
         return $result;
     }
 
@@ -483,41 +507,9 @@ class View extends \yii\web\View
             return $template;
         }
 
+        $templateMode = $this->templateMode;
+        $this->setTemplateMode(self::TEMPLATE_MODE_SITE);
         $twig = $this->getTwig();
-
-        // Is this the first time we've parsed this template?
-        $cacheKey = md5($template);
-        if (!isset($this->_objectTemplates[$cacheKey])) {
-            // Replace shortcut "{var}"s with "{{object.var}}"s, without affecting normal Twig tags
-            $template = $this->normalizeObjectTemplate($template);
-            $this->_objectTemplates[$cacheKey] = $twig->createTemplate($template);
-        }
-
-        // Get the variables to pass to the template
-        if ($object instanceof Model) {
-            foreach ($object->attributes() as $name) {
-                if (!isset($variables[$name]) && strpos($template, $name) !== false) {
-                    $variables[$name] = $object->$name;
-                }
-            }
-        }
-
-        if ($object instanceof Arrayable) {
-            // See if we should be including any of the extra fields
-            $extra = [];
-            foreach ($object->extraFields() as $field => $definition) {
-                if (is_int($field)) {
-                    $field = $definition;
-                }
-                if (strpos($template, $field) !== false) {
-                    $extra[] = $field;
-                }
-            }
-            $variables = array_merge($object->toArray([], $extra, false), $variables);
-        }
-
-        $variables['object'] = $object;
-        $variables['_variables'] = $variables;
 
         // Temporarily disable strict variables if it's enabled
         $strictVariables = $twig->isStrictVariables();
@@ -526,21 +518,57 @@ class View extends \yii\web\View
             $twig->disableStrictVariables();
         }
 
-        // Render it!
         $twig->setDefaultEscaperStrategy(false);
         $lastRenderingTemplate = $this->_renderingTemplate;
         $this->_renderingTemplate = 'string:' . $template;
-        /** @var Template $templateObj */
-        $templateObj = $this->_objectTemplates[$cacheKey];
 
         $e = null;
         try {
+            // Is this the first time we've parsed this template?
+            $cacheKey = md5($template);
+            if (!isset($this->_objectTemplates[$cacheKey])) {
+                // Replace shortcut "{var}"s with "{{object.var}}"s, without affecting normal Twig tags
+                $template = $this->normalizeObjectTemplate($template);
+                $this->_objectTemplates[$cacheKey] = $twig->createTemplate($template);
+            }
+
+            // Get the variables to pass to the template
+            if ($object instanceof Model) {
+                foreach ($object->attributes() as $name) {
+                    if (!isset($variables[$name]) && strpos($template, $name) !== false) {
+                        $variables[$name] = $object->$name;
+                    }
+                }
+            }
+
+            if ($object instanceof Arrayable) {
+                // See if we should be including any of the extra fields
+                $extra = [];
+                foreach ($object->extraFields() as $field => $definition) {
+                    if (is_int($field)) {
+                        $field = $definition;
+                    }
+                    if (strpos($template, $field) !== false) {
+                        $extra[] = $field;
+                    }
+                }
+                $variables = array_merge($object->toArray([], $extra, false), $variables);
+            }
+
+            $variables['object'] = $object;
+            $variables['_variables'] = $variables;
+
+            // Render it!
+            /** @var TwigTemplate $templateObj */
+            $templateObj = $this->_objectTemplates[$cacheKey];
             $output = $templateObj->render($variables);
         } catch (\Throwable $e) {
+            // throw it later
         }
 
         $this->_renderingTemplate = $lastRenderingTemplate;
         $twig->setDefaultEscaperStrategy();
+        $this->setTemplateMode($templateMode);
 
         // Re-enable strict variables
         if ($strictVariables) {
@@ -1578,12 +1606,22 @@ JS;
         }
 
         $this->_twigOptions = [
-            'base_template_class' => Template::class,
             // See: https://github.com/twigphp/Twig/issues/1951
             'cache' => Craft::$app->getPath()->getCompiledTemplatesPath(),
             'auto_reload' => true,
             'charset' => Craft::$app->charset,
         ];
+
+        $generalConfig = Craft::$app->getConfig()->getGeneral();
+
+        // Only load our custom Template class if they still have suppressTemplateErrors enabled
+        if ($generalConfig->suppressTemplateErrors) {
+            $this->_twigOptions['base_template_class'] = Template::class;
+        }
+
+        if ($generalConfig->headlessMode && Craft::$app->getRequest()->getIsSiteRequest()) {
+            $this->_twigOptions['autoescape'] = 'js';
+        }
 
         if (YII_DEBUG) {
             $this->_twigOptions['debug'] = true;

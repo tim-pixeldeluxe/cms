@@ -320,6 +320,7 @@ class EntriesController extends BaseEntriesController
         // Is this another user's entry (and it's not a Single)?
         if (
             $entry->id &&
+            !$duplicate &&
             $entry->authorId != $currentUser->id &&
             $entry->getSection()->type !== Section::TYPE_SINGLE &&
             $entry->enabled
@@ -559,7 +560,6 @@ class EntriesController extends BaseEntriesController
             } else if (!empty($variables['revisionId'])) {
                 $variables['entry'] = Entry::find()
                     ->revisionId($variables['revisionId'])
-                    ->structureId($structureId)
                     ->structureId($structureId)
                     ->siteId($site->id)
                     ->anyStatus()
