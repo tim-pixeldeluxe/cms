@@ -31,7 +31,7 @@ use yii\web\ServerErrorHttpException;
  * Note that all actions in the controller require an authenticated Craft session via [[allowAnonymous]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class EntryRevisionsController extends BaseEntriesController
 {
@@ -154,7 +154,8 @@ class EntryRevisionsController extends BaseEntriesController
         // Are we creating a new entry too?
         if (!$draftId && !$entryId) {
             $entry = new Entry();
-            $entry->sectionId = $request->getBodyParam('entryId');
+            $entry->siteId = $siteId;
+            $entry->sectionId = $request->getBodyParam('sectionId');
             $this->_setDraftAttributesFromPost($entry);
             $this->enforceEditEntryPermissions($entry);
             $entry->setFieldValuesFromRequest($fieldsLocation);

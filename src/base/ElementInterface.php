@@ -17,7 +17,7 @@ use Twig\Markup;
  * A class implementing this interface should also use [[ElementTrait]] and [[ContentTrait]].
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 interface ElementInterface extends ComponentInterface
 {
@@ -40,7 +40,7 @@ interface ElementInterface extends ComponentInterface
     public static function refHandle();
 
     /**
-     * Returns whether elements of this type will be storing any data in the `content` table (tiles or custom fields).
+     * Returns whether elements of this type will be storing any data in the `content` table (titles or custom fields).
      *
      * @return bool Whether elements of this type will be storing any data in the `content` table.
      */
@@ -407,7 +407,7 @@ interface ElementInterface extends ComponentInterface
      * Returns whether this is a draft.
      *
      * @return bool
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getIsDraft(): bool;
 
@@ -415,7 +415,7 @@ interface ElementInterface extends ComponentInterface
      * Returns whether this is a revision.
      *
      * @return bool
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getIsRevision(): bool;
 
@@ -423,7 +423,7 @@ interface ElementInterface extends ComponentInterface
      * Returns the element’s ID, or if it’s a draft/revision, its source element’s ID.
      *
      * @return int|null
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getSourceId();
 
@@ -431,7 +431,7 @@ interface ElementInterface extends ComponentInterface
      * Returns the element’s UUID, or if it’s a draft/revision, its source element’s UUID.
      *
      * @return string
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getSourceUid(): string;
 
@@ -439,7 +439,7 @@ interface ElementInterface extends ComponentInterface
      * Returns whether the element is an unsaved draft.
      *
      * @return bool
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getIsUnsavedDraft(): bool;
 
@@ -487,6 +487,14 @@ interface ElementInterface extends ComponentInterface
     public function getRoute();
 
     /**
+     * Returns whether this element represents the site homepage.
+     *
+     * @retern bool
+     * @since 3.3.6
+     */
+    public function getIsHomepage(): bool;
+
+    /**
      * Returns the element’s full URL.
      *
      * @return string|null
@@ -504,6 +512,7 @@ interface ElementInterface extends ComponentInterface
      * Returns what the element should be called within the Control Panel.
      *
      * @return string
+     * @since 3.2.0
      */
     public function getUiLabel(): string;
 
@@ -534,7 +543,7 @@ interface ElementInterface extends ComponentInterface
      * Each target should be represented by a sub-array with `'label'` and `'url'` keys.
      *
      * @return array
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getPreviewTargets(): array;
 
@@ -816,6 +825,7 @@ interface ElementInterface extends ComponentInterface
      * Sets the revision creator ID to be saved.
      *
      * @param int|null $creatorId
+     * @since 3.2.0
      */
     public function setRevisionCreatorId(int $creatorId = null);
 
@@ -823,6 +833,7 @@ interface ElementInterface extends ComponentInterface
      * Sets the revision notes to be saved.
      *
      * @param string|null $notes
+     * @since 3.2.0
      */
     public function setRevisionNotes(string $notes = null);
 
@@ -830,6 +841,7 @@ interface ElementInterface extends ComponentInterface
      * Returns the element’s current revision, if one exists.
      *
      * @return ElementInterface|null
+     * @since 3.2.0
      */
     public function getCurrentRevision();
 
@@ -915,6 +927,7 @@ interface ElementInterface extends ComponentInterface
      * :::
      *
      * @param bool $isNew Whether the element is brand new
+     * @since 3.2.0
      */
     public function afterPropagate(bool $isNew);
 
@@ -934,11 +947,13 @@ interface ElementInterface extends ComponentInterface
      * Performs actions before an element is restored.
      *
      * @return bool Whether the element should be restored
+     * @since 3.1.0
      */
     public function beforeRestore(): bool;
 
     /**
      * Performs actions after an element is restored.
+     * @since 3.1.0
      */
     public function afterRestore();
 

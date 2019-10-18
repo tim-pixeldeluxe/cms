@@ -22,7 +22,7 @@ use yii\helpers\Console;
  * Craft CMS CLI installer.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class InstallController extends Controller
 {
@@ -84,7 +84,7 @@ class InstallController extends Controller
     }
 
     /**
-     * Runs the install migration
+     * Runs the install migration.
      *
      * @return int
      */
@@ -179,7 +179,7 @@ class InstallController extends Controller
     }
 
     /**
-     * Installs a plugin
+     * Installs a plugin.
      *
      * @param string $handle
      * @return int

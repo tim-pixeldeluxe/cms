@@ -54,7 +54,7 @@ use yii\web\IdentityInterface;
  * @property \DateInterval|null $remainingCooldownTime the remaining cooldown time for this user, if they've entered their password incorrectly too many times
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class User extends Element implements IdentityInterface
 {
@@ -489,6 +489,7 @@ class User extends Element implements IdentityInterface
 
     /**
      * @var bool Whether the user has a dashboard
+     * @since 3.0.4
      */
     public $hasDashboard = false;
 
@@ -644,6 +645,7 @@ class User extends Element implements IdentityInterface
         $labels['lastName'] = Craft::t('app', 'Last Name');
         $labels['newPassword'] = Craft::t('app', 'New Password');
         $labels['password'] = Craft::t('app', 'Password');
+        $labels['unverifiedEmail'] = Craft::t('app', 'Email');
         $labels['username'] = Craft::t('app', 'Username');
         return $labels;
     }
@@ -1029,15 +1031,12 @@ class User extends Element implements IdentityInterface
      */
     public function getIsCurrent(): bool
     {
-        if ($this->id !== null) {
-            $currentUser = Craft::$app->getUser()->getIdentity();
-
-            if ($currentUser) {
-                return ($this->id === $currentUser->id);
-            }
+        if (!$this->id) {
+            return false;
         }
 
-        return false;
+        $currentUser = Craft::$app->getUser()->getIdentity();
+        return $currentUser && $currentUser->id == $this->id;
     }
 
     /**

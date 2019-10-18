@@ -48,6 +48,7 @@ use yii\base\Event;
 use yii\base\Exception;
 use yii\base\InvalidConfigException;
 use yii\caching\Cache;
+use yii\db\Exception as DbException;
 use yii\mutex\Mutex;
 use yii\web\ServerErrorHttpException;
 
@@ -126,7 +127,7 @@ use yii\web\ServerErrorHttpException;
  * @method Security getSecurity() Returns the security component.
  * @method View getView() Returns the view component.
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 trait ApplicationTrait
 {
@@ -247,15 +248,24 @@ trait ApplicationTrait
      */
     public function getIsInstalled(): bool
     {
-        /** @var WebApplication|ConsoleApplication $this */
         if ($this->_isInstalled !== null) {
             return $this->_isInstalled;
         }
 
-        return $this->_isInstalled = (
-            $this->getIsDbConnectionValid() &&
-            $this->getDb()->tableExists(Table::INFO, false)
-        );
+        if (!$this->getIsDbConnectionValid()) {
+            return $this->_isInstalled = false;
+        }
+
+        try {
+            $info = $this->getInfo(true);
+        } catch (DbException $e) {
+            if ($e->getCode() === 42) {
+                return $this->_isInstalled = false;
+            }
+            throw $e;
+        }
+
+        return $this->_isInstalled = !empty($info->id);
     }
 
     /**
@@ -273,6 +283,7 @@ trait ApplicationTrait
      * Returns the installed schema version.
      *
      * @return string
+     * @since 3.2.0
      */
     public function getInstalledSchemaVersion(): string
     {
@@ -283,6 +294,7 @@ trait ApplicationTrait
      * Returns whether Craft has been fully initialized.
      *
      * @return bool
+     * @since 3.0.13
      */
     public function getIsInitialized(): bool
     {
@@ -479,6 +491,7 @@ trait ApplicationTrait
      * Returns whether the system is currently live.
      *
      * @return bool
+     * @since 3.1.0
      */
     public function getIsLive(): bool
     {
@@ -544,23 +557,33 @@ trait ApplicationTrait
     /**
      * Returns the info model, or just a particular attribute.
      *
+     * @param $throwException Whether an exception should be thrown if the `info` table doesn't exist
      * @return Info
+     * @throws DbException if the `info` table doesn’t exist yet and `$throwException` is `true`
      * @throws ServerErrorHttpException if the info table is missing its row
      */
-    public function getInfo(): Info
+    public function getInfo($throwException = false): Info
     {
         /** @var WebApplication|ConsoleApplication $this */
         if ($this->_info !== null) {
             return $this->_info;
         }
 
-        if (!$this->getIsInstalled()) {
-            return new Info();
+        try {
+            $row = (new Query())
+                ->from([Table::INFO])
+                ->one();
+        } catch (DbException $e) {
+            if ($throwException) {
+                throw $e;
+            }
+            return $this->_info = new Info();
+        } catch (DbConnectException $e) {
+            if ($throwException) {
+                throw $e;
+            }
+            return $this->_info = new Info();
         }
-
-        $row = (new Query())
-            ->from([Table::INFO])
-            ->one();
 
         if (!$row) {
             $tableName = $this->getDb()->getSchema()->getRawTableName(Table::INFO);
@@ -703,6 +726,7 @@ trait ApplicationTrait
      * Returns the system name.
      *
      * @return string
+     * @since 3.1.4
      */
     public function getSystemName(): string
     {
@@ -878,7 +902,7 @@ trait ApplicationTrait
      * Returns the drafts service.
      *
      * @return \craft\services\Drafts The drafts service
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getDrafts()
     {
@@ -989,6 +1013,7 @@ trait ApplicationTrait
      * Returns the GraphQL service.
      *
      * @return \craft\services\Gql The GraphQL service
+     * @since 3.3.0
      */
     public function getGql()
     {
@@ -1121,7 +1146,7 @@ trait ApplicationTrait
      * Returns the revisions service.
      *
      * @return \craft\services\Revisions The revisions service
-     * @since 3.2
+     * @since 3.2.0
      */
     public function getRevisions()
     {

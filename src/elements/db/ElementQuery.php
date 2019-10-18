@@ -44,7 +44,7 @@ use yii\db\ExpressionInterface;
  * @property string|Site $site The site or site handle that the elements should be returned in
  * @mixin ElementQueryBehavior
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class ElementQuery extends Query implements ElementQueryInterface
 {
@@ -145,6 +145,7 @@ class ElementQuery extends Query implements ElementQueryInterface
     /**
      * @var bool Whether to ignore placeholder elements when populating the results.
      * @used-by ignorePlaceholders()
+     * @since 3.2.9
      */
     public $ignorePlaceholders = false;
 
@@ -153,42 +154,50 @@ class ElementQuery extends Query implements ElementQueryInterface
 
     /**
      * @var bool Whether draft elements should be returned.
+     * @since 3.2.0
      */
     public $drafts = false;
 
     /**
      * @var int|null The ID of the draft to return (from the `drafts` table)
+     * @since 3.2.0
      */
     public $draftId;
 
     /**
      * @var int|false|null The source element ID that drafts should be returned for.
      * Set to `false` to fetch unsaved drafts.
+     * @since 3.2.0
      */
     public $draftOf;
 
     /**
      * @var int|null The drafts’ creator ID
+     * @since 3.2.0
      */
     public $draftCreator;
 
     /**
      * @var bool Whether revision elements should be returned.
+     * @since 3.2.0
      */
     public $revisions = false;
 
     /**
      * @var int|null The ID of the revision to return (from the `revisions` table)
+     * @since 3.2.0
      */
     public $revisionId;
 
     /**
      * @var int|null The source element ID that revisions should be returned for
+     * @since 3.2.0
      */
     public $revisionOf;
 
     /**
      * @var int|null The revisions’ creator ID
+     * @since 3.2.0
      */
     public $revisionCreator;
 
@@ -229,6 +238,7 @@ class ElementQuery extends Query implements ElementQueryInterface
      * @var bool|null Whether to return trashed (soft-deleted) elements.
      * If this is set to `null`, then both trashed and non-trashed elements will be returned.
      * @used-by trashed()
+     * @since 3.1.0
      */
     public $trashed = false;
 
@@ -255,14 +265,14 @@ class ElementQuery extends Query implements ElementQueryInterface
     /**
      * @var bool Whether only elements with unique IDs should be returned by the query.
      * @used-by unique()
-     * @since 3.2
+     * @since 3.2.0
      */
     public $unique = false;
 
     /**
      * @var array|null Determines which site should be selected when querying multi-site elements.
      * @used-by preferSites()
-     * @since 3.2
+     * @since 3.2.0
      */
     public $preferSites = false;
 
@@ -364,6 +374,7 @@ class ElementQuery extends Query implements ElementQueryInterface
     /**
      * @var bool|null Whether the resulting elements must have descendants.
      * @used-by hasDescendants()
+     * @since 3.0.4
      */
     public $hasDescendants;
 
@@ -997,7 +1008,7 @@ class ElementQuery extends Query implements ElementQueryInterface
     /**
      * @inheritdoc
      * @uses $unique
-     * @since 3.2
+     * @since 3.2.0
      */
     public function unique(bool $value = true)
     {
@@ -1008,7 +1019,7 @@ class ElementQuery extends Query implements ElementQueryInterface
     /**
      * @inheritdoc
      * @uses $preferSites
-     * @since 3.2
+     * @since 3.2.0
      */
     public function preferSites(array $value = null)
     {
@@ -2293,9 +2304,13 @@ class ElementQuery extends Query implements ElementQueryInterface
             }
         }
 
-        if ($this->siblingOf) {
+        foreach (['siblingOf', 'prevSiblingOf', 'nextSiblingOf'] as $param) {
+            if (!$this->$param) {
+                continue;
+            }
+
             /** @var Element $siblingOf */
-            $siblingOf = $this->_normalizeStructureParamValue('siblingOf', $class);
+            $siblingOf = $this->_normalizeStructureParamValue($param, $class);
 
             $this->subQuery->andWhere([
                 'and',
@@ -2320,28 +2335,23 @@ class ElementQuery extends Query implements ElementQueryInterface
                     ['<', 'structureelements.rgt', $parent->rgt]
                 ]);
             }
-        }
 
-        if ($this->prevSiblingOf) {
-            /** @var Element $prevSiblingOf */
-            $prevSiblingOf = $this->_normalizeStructureParamValue('prevSiblingOf', $class);
-
-            $this->subQuery->andWhere([
-                'structureelements.level' => $prevSiblingOf->level,
-                'structureelements.rgt' => $prevSiblingOf->lft - 1,
-                'structureelements.root' => $prevSiblingOf->root
-            ]);
-        }
-
-        if ($this->nextSiblingOf) {
-            /** @var Element $nextSiblingOf */
-            $nextSiblingOf = $this->_normalizeStructureParamValue('nextSiblingOf', $class);
-
-            $this->subQuery->andWhere([
-                'structureelements.level' => $nextSiblingOf->level,
-                'structureelements.lft' => $nextSiblingOf->rgt + 1,
-                'structureelements.root' => $nextSiblingOf->root
-            ]);
+            switch ($param) {
+                case 'prevSiblingOf':
+                    $this->query->orderBy(['structureelements.lft' => SORT_DESC]);
+                    $this->subQuery
+                        ->andWhere(['<', 'structureelements.lft', $siblingOf->lft])
+                        ->orderBy(['structureelements.lft' => SORT_DESC])
+                        ->limit(1);
+                    break;
+                case 'nextSiblingOf':
+                    $this->query->orderBy(['structureelements.lft' => SORT_ASC]);
+                    $this->subQuery
+                        ->andWhere(['>', 'structureelements.lft', $siblingOf->lft])
+                        ->orderBy(['structureelements.lft' => SORT_ASC])
+                        ->limit(1);
+                    break;
+            }
         }
 
         if ($this->positionedBefore) {
@@ -2467,7 +2477,7 @@ class ElementQuery extends Query implements ElementQueryInterface
             throw new QueryAbortedException();
         }
 
-        return $this->$property;
+        return $this->$property = ElementHelper::sourceElement($this->$property);
     }
 
     /**
@@ -2533,7 +2543,12 @@ class ElementQuery extends Query implements ElementQueryInterface
      */
     private function _applyOrderByParams(Connection $db)
     {
-        if ($this->orderBy === null) {
+        if (
+            $this->orderBy === null ||
+            $this->orderBy === ['score' => SORT_ASC] ||
+            $this->orderBy === ['score' => SORT_DESC] ||
+            !empty($this->query->orderBy)
+        ) {
             return;
         }
 
@@ -2557,18 +2572,11 @@ class ElementQuery extends Query implements ElementQueryInterface
                 $this->orderBy = ['num' => SORT_DESC];
             } else if ($this->_shouldJoinStructureData()) {
                 $this->orderBy = ['structureelements.lft' => SORT_ASC] + $this->defaultOrderBy;
-            } else {
+            } else if (!empty($this->defaultOrderBy)) {
                 $this->orderBy = $this->defaultOrderBy;
+            } else {
+                return;
             }
-        }
-
-        if (
-            empty($this->orderBy) ||
-            $this->orderBy === ['score' => SORT_ASC] ||
-            $this->orderBy === ['score' => SORT_DESC] ||
-            !empty($this->query->orderBy)
-        ) {
-            return;
         }
 
         // Define the real column name mapping (e.g. `fieldHandle` => `field_fieldHandle`)
@@ -2734,9 +2742,10 @@ class ElementQuery extends Query implements ElementQueryInterface
         $qElements = $db->quoteTableName('elements');
         $qSubElements = $db->quoteTableName('subElements');
         $qTmpElements = $db->quoteTableName('tmpElements');
-        $subSelectSql = str_replace($qElements, $qSubElements, $subSelectSql);
+        $q = $qElements[0];
+        $subSelectSql = str_replace("{$qElements}.", "{$qSubElements}.", $subSelectSql);
+        $subSelectSql = str_replace("{$q} {$qElements}", "{$q} {$qSubElements}", $subSelectSql);
         $subSelectSql = str_replace($qTmpElements, $qElements, $subSelectSql);
-        $subSelectSql = str_replace("{$qSubElements} {$qSubElements}", "{$qElements} {$qSubElements}", $subSelectSql);
 
         $this->subQuery->andWhere(new Expression("[[elements_sites.id]] = ({$subSelectSql})"));
     }

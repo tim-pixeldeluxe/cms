@@ -51,7 +51,7 @@ use yii\web\AssetBundle as YiiAssetBundle;
  * @property-write string[] $registeredAssetBundles the asset bundle names that should be marked as already registered
  * @property-write string[] $registeredJsFiles the JS files that should be marked as already registered
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class View extends \yii\web\View
 {
@@ -441,19 +441,20 @@ class View extends \yii\web\View
      *
      * @param string $template The source template string.
      * @param array $variables Any variables that should be available to the template.
+     * @param string $templateMode The template mode to use.
      * @return string The rendered template.
      * @throws TwigLoaderError
      * @throws TwigSyntaxError
      */
-    public function renderString(string $template, array $variables = []): string
+    public function renderString(string $template, array $variables = [], string $templateMode = self::TEMPLATE_MODE_SITE): string
     {
         // If there are no dynamic tags, just return the template
         if (strpos($template, '{') === false) {
             return $template;
         }
 
-        $templateMode = $this->templateMode;
-        $this->setTemplateMode(self::TEMPLATE_MODE_SITE);
+        $oldTemplateMode = $this->templateMode;
+        $this->setTemplateMode($templateMode);
 
         $twig = $this->getTwig();
         $twig->setDefaultEscaperStrategy(false);
@@ -469,7 +470,7 @@ class View extends \yii\web\View
 
         $this->_renderingTemplate = $lastRenderingTemplate;
         $twig->setDefaultEscaperStrategy();
-        $this->setTemplateMode($templateMode);
+        $this->setTemplateMode($oldTemplateMode);
 
         if ($e !== null) {
             if (!YII_DEBUG) {
@@ -496,19 +497,20 @@ class View extends \yii\web\View
      * @param string $template the source template string
      * @param mixed $object the object that should be passed into the template
      * @param array $variables any additional variables that should be available to the template
+     * @param string $templateMode The template mode to use.
      * @return string The rendered template.
      * @throws Exception in case of failure
      * @throws \Throwable in case of failure
      */
-    public function renderObjectTemplate(string $template, $object, array $variables = []): string
+    public function renderObjectTemplate(string $template, $object, array $variables = [], string $templateMode = self::TEMPLATE_MODE_SITE): string
     {
         // If there are no dynamic tags, just return the template
         if (strpos($template, '{') === false) {
             return $template;
         }
 
-        $templateMode = $this->templateMode;
-        $this->setTemplateMode(self::TEMPLATE_MODE_SITE);
+        $oldTemplateMode = $this->templateMode;
+        $this->setTemplateMode($templateMode);
         $twig = $this->getTwig();
 
         // Temporarily disable strict variables if it's enabled
@@ -568,7 +570,7 @@ class View extends \yii\web\View
 
         $this->_renderingTemplate = $lastRenderingTemplate;
         $twig->setDefaultEscaperStrategy();
-        $this->setTemplateMode($templateMode);
+        $this->setTemplateMode($oldTemplateMode);
 
         // Re-enable strict variables
         if ($strictVariables) {
@@ -1312,6 +1314,7 @@ JS;
      * Sets the JS files that should be marked as already registered.
      *
      * @param string[] $keys
+     * @since 3.0.10
      */
     public function setRegisteredJsFiles(array $keys)
     {
@@ -1322,6 +1325,7 @@ JS;
      * Sets the asset bundle names that should be marked as already registered.
      *
      * @param string[] $names Asset bundle names
+     * @since 3.0.10
      */
     public function setRegisteredAssetBundles(array $names)
     {

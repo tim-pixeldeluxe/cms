@@ -8,6 +8,7 @@
 namespace craft\controllers;
 
 use Craft;
+use craft\base\Element;
 use craft\elements\Entry;
 use craft\helpers\Json;
 use craft\helpers\UrlHelper;
@@ -26,7 +27,7 @@ use yii\web\Response;
  * Note that all actions in this controller require administrator access in order to execute.
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.0
+ * @since 3.0.0
  */
 class SectionsController extends Controller
 {
@@ -171,7 +172,7 @@ class SectionsController extends Controller
             $siteSettings->siteId = $site->id;
 
             if ($section->type === Section::TYPE_SINGLE) {
-                $siteSettings->uriFormat = ($postedSettings['singleHomepage'] ?? false) ? '__home__' : ($postedSettings['singleUri'] ?? null);
+                $siteSettings->uriFormat = ($postedSettings['singleHomepage'] ?? false) ? Element::HOMEPAGE_URI : ($postedSettings['singleUri'] ?? null);
             } else {
                 $siteSettings->uriFormat = $postedSettings['uriFormat'] ?? null;
                 $siteSettings->enabledByDefault = (bool)$postedSettings['enabledByDefault'];

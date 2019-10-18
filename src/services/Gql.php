@@ -11,6 +11,7 @@ use Craft;
 use craft\db\Table;
 use craft\db\Query as DbQuery;
 use craft\errors\GqlException;
+use craft\events\ExecuteGqlQueryEvent;
 use craft\events\RegisterGqlDirectivesEvent;
 use craft\events\RegisterGqlQueriesEvent;
 use craft\events\RegisterGqlTypesEvent;
@@ -128,16 +129,59 @@ class Gql extends Component
     const EVENT_REGISTER_GQL_DIRECTIVES = 'registerGqlDirectives';
 
     /**
-     * Currently loaded schema definition
+     * @event ExecuteGqlQueryEvent The event that is triggered before executing the GraphQL query.
      *
-     * @var Schema
+     * Plugins get a chance to modify the query or return a cached response.
+     *
+     * ---
+     * ```php
+     * use craft\events\ExecuteGqlQueryEvent;
+     * use craft\services\GraphQl;
+     * use yii\base\Event;
+     *
+     * Event::on(Gql::class,
+     *     Gql::EVENT_BEFORE_EXECUTE_GQL_QUERY,
+     *     function(ExecuteGqlQueryEvent $event) {
+     *         // Set the result from cache
+     *         $event->result = ...;
+     *     }
+     * );
+     * ```
+     *
+     * @since 3.3.11
+     */
+    const EVENT_BEFORE_EXECUTE_GQL_QUERY = 'beforeExecuteGqlQuery';
+
+    /**
+     * @event ExecuteGqlQueryEvent The event that is triggered after executing the GraphQL query.
+     *
+     * Plugins get a chance to do sometheing after a performed GraphQL query.
+     *
+     * ---
+     * ```php
+     * use craft\events\ExecuteGqlQueryEvent;
+     * use craft\services\GraphQl;
+     * use yii\base\Event;
+     *
+     * Event::on(Gql::class,
+     *     Gql::EVENT_AFTER_EXECUTE_GQL_QUERY,
+     *     function(ExecuteGqlQueryEvent $event) {
+     *         // Cache the results from $event->result or just tweak them
+     *     }
+     * );
+     * ```
+     *
+     * @since 3.3.11
+     */
+    const EVENT_AFTER_EXECUTE_GQL_QUERY = 'afterExecuteGqlQuery';
+
+    /**
+     * @var Schema Currently loaded schema definition
      */
     private $_schemaDef;
 
     /**
-     * The active GraphQL schema
-     *
-     * @var GqlSchema
+     * @var GqlSchema The active GraphQL schema
      * @see setActiveSchema()
      */
     private $_schema;
@@ -169,17 +213,6 @@ class Gql extends Component
                 'query' => TypeLoader::loadType('Query'),
                 'directives' => $this->_loadGqlDirectives(),
             ];
-
-            // For some reason, matrix types need to be explicitly defined, too,
-            // otherwise it will complain on querying matrix blocks
-            $typeGeneratorClass = MatrixBlockInterface::getTypeGenerator();
-
-            foreach ($typeGeneratorClass::generateTypes() as $type) {
-                $schemaConfig['types'][] = $type;
-            }
-
-            // TODO fire an event to allow modifying the $schemConfig.
-            // At least one use-case being adding workaround like for Matrix above.
 
             // If we're not required to pre-build the schema the relevant GraphQL types will be added to the Schema
             // as the query is being resolved thanks to the magic of lazy-loading, so we needn't worry.
@@ -223,6 +256,36 @@ class Gql extends Component
         }
 
         return $this->_schemaDef;
+    }
+
+    /**
+     * Execute a GraphQL query for a given schema definition.
+     *
+     * @param Schema $schema The schema definition to use.
+     * @param string $query The query string to execute.
+     * @param array|null $variables The variables to use.
+     * @param string|null $operationName The operation name.
+     * @return array
+     * @since 3.3.11
+     */
+    public function executeQuery(Schema $schemaDef, string $query, $variables, $operationName): array
+    {
+        $event = new ExecuteGqlQueryEvent([
+            'schemaDef' => $schemaDef,
+            'query' => $query,
+            'variables' => $variables,
+            'operationName' => $operationName,
+        ]);
+
+        $this->trigger(self::EVENT_BEFORE_EXECUTE_GQL_QUERY, $event);
+
+        if ($event->result === null) {
+            $event->result = GraphQL::executeQuery($schemaDef, $query, $event->rootValue, $event->context, $variables, $operationName)->toArray(true);
+        }
+
+        $this->trigger(self::EVENT_AFTER_EXECUTE_GQL_QUERY, $event);
+
+        return $event->result;
     }
 
     /**

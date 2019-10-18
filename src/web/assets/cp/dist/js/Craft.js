@@ -1,4 +1,4 @@
-/*!   - 2019-09-25 */
+/*!   - 2019-10-11 */
 (function($){
 
 /** global: Craft */
@@ -4952,10 +4952,10 @@ Craft.AdminTable = Garnish.Base.extend(
                 this.updateUI();
                 this.onDeleteItem(id);
 
-                Craft.cp.displayNotice(Craft.t('app', this.settings.deleteSuccessMessage, {name: Craft.escapeHtml(name)}));
+                Craft.cp.displayNotice(Craft.t('app', this.settings.deleteSuccessMessage, {name: name}));
             }
             else {
-                Craft.cp.displayError(Craft.t('app', this.settings.deleteFailMessage, {name: Craft.escapeHtml(name)}));
+                Craft.cp.displayError(Craft.t('app', this.settings.deleteFailMessage, {name: name}));
             }
         },
 
@@ -4972,7 +4972,7 @@ Craft.AdminTable = Garnish.Base.extend(
         },
 
         getItemName: function($row) {
-            return $row.attr(this.settings.nameAttribute);
+            return Craft.escapeHtml($row.attr(this.settings.nameAttribute));
         },
 
         updateUI: function() {
@@ -5076,6 +5076,8 @@ Craft.AssetEditor = Craft.BaseElementEditor.extend(
         onHideHud: function () {
             if (this.reloadIndex && this.settings.elementIndex) {
                 this.settings.elementIndex.updateElements();
+            } else if (this.reloadIndex && this.settings.input) {
+                this.settings.input.refreshThumbnail(this.$element.data('id'));
             }
 
             this.base();
@@ -9099,7 +9101,8 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
             return this.base($element, {
                 params: {
                     defaultFieldLayoutId: this.settings.defaultFieldLayoutId
-                }
+                },
+                input: this
             });
         },
 
@@ -9136,6 +9139,24 @@ Craft.AssetSelectInput = Craft.BaseElementSelectInput.extend(
             options.events.fileuploaddone = $.proxy(this, '_onUploadComplete');
 
             this.uploader = new Craft.Uploader(this.$container, options);
+        },
+
+        refreshThumbnail: function(elementId) {
+            var parameters = {
+                elementId: elementId,
+                siteId: this.settings.criteria.siteId,
+                size: this.settings.viewMode
+            };
+
+            Craft.postActionRequest('elements/get-element-html', parameters, function(data) {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    var $existing = this.$elements.filter('[data-id="' + elementId + '"]');
+                    $existing.find('.elementthumb').replaceWith($(data.html).find('.elementthumb'));
+                    this.thumbLoader.load($existing);
+                }
+            }.bind(this));
         },
 
         /**
