@@ -7,28 +7,29 @@
 
 namespace craft\gql\types;
 
-use craft\gql\directives\FormatDateTime;
+use craft\errors\GqlException;
 use craft\gql\GqlEntityRegistry;
+use GraphQL\Language\AST\IntValueNode;
 use GraphQL\Language\AST\StringValueNode;
 use GraphQL\Type\Definition\ScalarType;
 
 /**
- * Class DateTime
+ * Class QueryArgument
  *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
- * @since 3.3.0
+ * @since 3.3.14
  */
-class DateTime extends ScalarType
+class QueryArgument extends ScalarType
 {
     /**
      * @var string
      */
-    public $name = 'DateTime';
+    public $name = 'QueryParameter';
 
     /**
      * @var string
      */
-    public $description = 'The `DateTime` scalar type represents a point in time.';
+    public $description = 'The `QueryParameter` scalar type represents a value to be using in Craft element queries. It can be both an integer or a string.';
 
     public function __construct(array $config = [])
     {
@@ -38,9 +39,9 @@ class DateTime extends ScalarType
     /**
      * Returns a singleton instance to ensure one type per schema.
      *
-     * @return DateTime
+     * @return QueryArgument
      */
-    public static function getType(): DateTime
+    public static function getType(): QueryArgument
     {
         return GqlEntityRegistry::getEntity(self::class) ?: GqlEntityRegistry::createEntity(self::class, new self());
     }
@@ -51,7 +52,7 @@ class DateTime extends ScalarType
      */
     public static function getName(): string
     {
-        return 'DateTime';
+        return 'QueryParameter';
     }
 
     /**
@@ -60,9 +61,8 @@ class DateTime extends ScalarType
     public function serialize($value)
     {
         // The value not being a datetime would indicate an already formatted date.
-        if ($value instanceof \DateTime) {
-            $value->setTimezone(new \DateTimeZone(FormatDateTime::DEFAULT_TIMEZONE));
-            $value = $value->format(FormatDateTime::DEFAULT_FORMAT);
+        if (!is_int($value) && !is_string($value)) {
+            $value = (string)$value;
         }
 
         return $value;
@@ -73,7 +73,11 @@ class DateTime extends ScalarType
      */
     public function parseValue($value)
     {
-        return (string)$value;
+        if (!is_int($value) && !is_string($value)) {
+            throw new GqlException("QueryParameter must be either a string or an integer.");
+        }
+
+        return $value;
     }
 
     /**
@@ -85,7 +89,11 @@ class DateTime extends ScalarType
             return (string)$valueNode->value;
         }
 
+        if ($valueNode instanceof IntValueNode) {
+            return (int)$valueNode->value;
+        }
+
         // Intentionally without message, as all information already in wrapped Exception
-        throw new \Exception();
+        throw new GqlException("QueryParameter must be either a string or an integer.");
     }
 }

@@ -90,7 +90,6 @@ return [
     'Are you sure you want to delete this group and all its fields?' => 'このグループと関連のフィールドを削除してもよろしいですか？',
     'Are you sure you want to delete this group?' => 'このグループを削除してもよろしいですか？',
     'Are you sure you want to delete this image?' => 'この画像を削除してもよろしいですか？',
-    'Are you sure you want to delete this photo?' => 'この写真を削除してもよろしいですか？',
     'Are you sure you want to delete this route?' => 'このルートを削除してもよろしいですか？',
     'Are you sure you want to delete “{name}” and all entries that use it?' => '「{name}」とそれを使用するすべてのエントリを削除してもよろしいですか？',
     'Are you sure you want to delete “{name}” and all its categories?' => '「{name}」とそのすべてのカテゴリを削除してもよろしいですか？',
@@ -1500,6 +1499,6 @@ return [
     'Delete them' => 'これらを削除',
     'Keep them' => 'これらを保持',
     'View tag group - {tagGroup}' => 'タググループを表示 - {tagGroup}',
-    'Single'=> 'Single',
-    'Channel'=> 'Channel'
+    'Single' => 'Single',
+    'Channel' => 'Channel'
 ];

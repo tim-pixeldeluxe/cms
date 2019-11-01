@@ -90,7 +90,6 @@ return [
     'Are you sure you want to delete this group and all its fields?' => 'Bu grubu ve tüm alanlarını silmek istediğinize emin misiniz?',
     'Are you sure you want to delete this group?' => 'Bu grubu silmek istediğinizden emin misiniz?',
     'Are you sure you want to delete this image?' => 'Bu resmi silmek istediğinizden emin misiniz?',
-    'Are you sure you want to delete this photo?' => 'Bu fotoğrafı silmek istediğinize emin misiniz?',
     'Are you sure you want to delete this route?' => 'Bu rotayı silmek istediğinizden emin misiniz?',
     'Are you sure you want to delete “{name}” and all entries that use it?' => '“{name}” ve onu kullanan tüm kayıtlarını silmek istediğinize emin misiniz?',
     'Are you sure you want to delete “{name}” and all its categories?' => '“{name}” ve tüm kategorilerini silmek istediğinize emin misiniz?',
@@ -1496,6 +1495,6 @@ Bu epostayı beklemiyorduysanız, görmezden gelin.',
     'Delete them' => 'Öğeleri sil',
     'Keep them' => 'Öğeleri tut',
     'View tag group - {tagGroup}' => 'Etiket grubunu göster - {tagGroup}',
-    'Single'=> 'Single',
-    'Channel'=> 'Channel'
+    'Single' => 'Single',
+    'Channel' => 'Channel'
 ];

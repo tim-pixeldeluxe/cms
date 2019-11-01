@@ -16,6 +16,7 @@ use craft\helpers\ArrayHelper;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use craft\helpers\FileHelper;
+use craft\helpers\Gql;
 use craft\helpers\Html;
 use craft\helpers\Json;
 use craft\helpers\Sequence;
@@ -390,7 +391,10 @@ class Extension extends AbstractExtension implements GlobalsInterface
     public function jsonEncodeFilter($value, int $options = null, int $depth = 512)
     {
         if ($options === null) {
-            if (in_array(Craft::$app->getResponse()->getContentType(), ['text/html', 'application/xhtml+xml'], true)) {
+            if (
+                !Craft::$app->getRequest()->getIsConsoleRequest() &&
+                in_array(Craft::$app->getResponse()->getContentType(), ['text/html', 'application/xhtml+xml'], true)
+            ) {
                 $options = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT;
             } else {
                 $options = 0;
@@ -460,7 +464,7 @@ class Extension extends AbstractExtension implements GlobalsInterface
      * @return string The modified HTML
      * @since 3.3.0
      */
-    public static function prependFilter(string $tag, string $html, string $ifExists = null): string
+    public function prependFilter(string $tag, string $html, string $ifExists = null): string
     {
         try {
             return Html::prependToTag($tag, $html, $ifExists);
@@ -540,7 +544,7 @@ class Extension extends AbstractExtension implements GlobalsInterface
      * @return string The modified HTML
      * @since 3.3.0
      */
-    public static function appendFilter(string $tag, string $html, string $ifExists = null): string
+    public function appendFilter(string $tag, string $html, string $ifExists = null): string
     {
         try {
             return Html::appendToTag($tag, $html, $ifExists);
@@ -688,14 +692,14 @@ class Extension extends AbstractExtension implements GlobalsInterface
     }
 
     /**
-     * Groups an array or element query's results by a common property.
+     * Groups an array by a the results of an arrow function, or value of a property.
      *
      * @param array|\Traversable $arr
-     * @param string $item
-     * @return array
+     * @param callable|string $arrow The arrow function or property name that determines the group the item should be grouped in
+     * @return array[] The grouped items
      * @throws RuntimeError if $arr is not of type array or Traversable
      */
-    public function groupFilter($arr, string $item): array
+    public function groupFilter($arr, $arrow): array
     {
         if ($arr instanceof ElementQuery) {
             Craft::$app->getDeprecator()->log('ElementQuery::getIterator()', 'Looping through element queries directly has been deprecated. Use the all() function to fetch the query results before looping over them.');
@@ -708,11 +712,18 @@ class Extension extends AbstractExtension implements GlobalsInterface
 
         $groups = [];
 
-        $template = '{' . $item . '}';
-
-        foreach ($arr as $key => $object) {
-            $value = Craft::$app->getView()->renderObjectTemplate($template, $object);
-            $groups[$value][] = $object;
+        if (is_callable($arrow)) {
+            foreach ($arr as $key => $item) {
+                $groupKey = (string)$arrow($item, $key);
+                $groups[$groupKey][] = $item;
+            }
+        } else {
+            $template = '{' . $arrow . '}';
+            $view = Craft::$app->getView();
+            foreach ($arr as $item) {
+                $groupKey = $view->renderObjectTemplate($template, $item);
+                $groups[$groupKey][] = $item;
+            }
         }
 
         return $groups;
@@ -823,6 +834,7 @@ class Extension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('expression', [$this, 'expressionFunction']),
             new TwigFunction('floor', 'floor'),
             new TwigFunction('getenv', 'getenv'),
+            new TwigFunction('gql', [$this, 'gqlFunction']),
             new TwigFunction('parseEnv', [Craft::class, 'parseEnv']),
             new TwigFunction('plugin', [$this, 'pluginFunction']),
             new TwigFunction('renderObjectTemplate', [$this, 'renderObjectTemplate']),
@@ -875,6 +887,21 @@ class Extension extends AbstractExtension implements GlobalsInterface
     public function expressionFunction($expression, $params = [], $config = []): Expression
     {
         return new Expression($expression, $params, $config);
+    }
+
+    /**
+     * Executes a GraphQL query against the full schema.
+     *
+     * @param string $query The GraphQL query
+     * @param array|null $variables Query variables
+     * @param string|null $operationName The operation name
+     * @return array The query result
+     * @since 3.3.12
+     */
+    public function gqlFunction(string $query, array $variables = null, string $operationName = null): array
+    {
+        $schema = Gql::createFullAccessSchema();
+        return Craft::$app->getGql()->executeQuery($schema, $query, $variables, $operationName);
     }
 
     /**

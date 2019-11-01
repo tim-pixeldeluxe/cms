@@ -1,5 +1,84 @@
 # Release Notes for Craft CMS 3.x
 
+## 3.3.14 - 2019-10-30
+
+### Added
+- GraphQL entry queries now support an `authorGroupId` argument.
+- Added `craft\gql\types\QueryArgument`.
+
+### Changed
+- It’s now possible to provide multiple values for the `height`, `width`, and `size` arguments when querying or filtering assets via GraphQL.
+- It’s now possible to provide multiple values for the `expiryDate` and `postDate` arguments when querying for elements via GraphQL.
+- It’s now possible to use the `not` keyword in the `id` argument when querying for elements via GraphQL.
+- It’s now possible to use the `not` keyword in the `folderId` and `volumeId` arguments when querying or filtering assets via GraphQL.
+- It’s now possible to use the `not` keyword in the `groupId` argument when querying or filtering tags or categories via GraphQL.
+- It’s now possible to use the `not` keyword in the `sectionId`, `typeId`, and `authorId` arguments when querying or filtering entries via GraphQL.
+- It’s now possible to use the `not` keyword in the `fieldId`, `ownerId`, and `typeId` when filtering Matrix blocks via GraphQL.
+- Craft no longer bundles Bootstrap, as the Debug Extension now provides its own copy.
+- Updated the bundled locale data based on ICU 64.1.
+- Formatted dates now include two-digit months and days if that’s what’s called for by the ICU date formats. ([#5186](https://github.com/craftcms/cms/issues/5186))
+
+### Fixed
+- Fixed a bug where Edit Entry pages would often warn authors when leaving the page even if nothing had changed, if there was a Redactor field or other field that was doing its own value normalization on page load. ([craftcms/redactor#161](https://github.com/craftcms/redactor/issues/161))
+- Fixed a bug where assets could remain in their temporary upload location after an entry was first published. ([#5139](https://github.com/craftcms/cms/issues/5139)
+- Fixed a bug where the `update` command could run out of memory. ([#1852](https://github.com/craftcms/cms/issues/1852))
+- Fixed a bug where saving a new GraphQL schema would not populate the UID property.
+- Fixed a bug where Craft wasn’t clearing search keywords for custom fields that weren’t searchable anymore. ([#5168](https://github.com/craftcms/cms/issues/5168))
+- Fixed a bug where `relatedTo` element query params weren’t returning elements that were related to the source element when previewing a draft or revision.
+- Fixed a bug where importing project config changes would break if they contained a changed global set and orphaned Matrix block types. ([#4789](https://github.com/craftcms/cms/issues/4789)
+
+## 3.3.13 - 2019-10-23
+
+### Added
+- It’s now possible to pass arrow functions to the `|group` filter. ([#5156](https://github.com/craftcms/cms/issues/5156))
+
+### Changed
+- Underscores are now stripped from search keywords before being saved to the database.
+
+### Fixed
+- Fixed a bug where translation message parameters weren’t getting parsed correctly if the installed ICU library was less than version 4.8. ([#4995](https://github.com/craftcms/cms/issues/4995))
+- Fixed a bug where GraphQL caches were not being invalidated on element save. ([#5148](https://github.com/craftcms/cms/issues/5148))
+- Fixed a bug where GraphQL type generators provided by plugins were not getting invoked when building introspection schemas. ([#5149](https://github.com/craftcms/cms/issues/5149))
+- Fixed an error that occurred when using the `|json_encode` Twig filter on console requests. ([#5150](https://github.com/craftcms/cms/issues/5150))
+- Fixed a bug where editable table rows could get taller than they should. ([#5159](https://github.com/craftcms/cms/issues/5159))
+
+## 3.3.12 - 2019-10-22
+
+### Added
+- GraphQL query results are now cached.
+- The GraphQL → Explore page now lists a “Full Schema” option before the Public Schema and any custom-defined schemas.
+- Added the “GraphQL caches” option for the Clear Caches utility.
+- Added the `gql()` Twig function, which executes a GraphQL query and returns the result.
+- Added the `enableGraphQlCaching` config setting.
+- Added the `transform` GraphQL parameter for asset URLs (alias of `handle`).
+- Added the `url` field to the `EntryInterface` GraphQL type. ([#5113](https://github.com/craftcms/cms/issues/5113))
+- Added the `relatedTo` and `relatedToAll` arguments for all GraphQL element queries. ([#5071](https://github.com/craftcms/cms/issues/5071))
+- Added support for multi-site GraphQL element queries. ([#5079](https://github.com/craftcms/cms/issues/5079))
+- Added `craft\helpers\Gql::createFullAccessSchema()`.
+- Added `craft\models\GqlSchema::$isTemporary`.
+- Added the `$invalidateCaches` argument to `craft\services\Gql::saveSchema()`.
+
+### Changed
+- Matrix blocks now maintain the same `display` style when expanded as they had before they were initially collapsed. ([#5075](https://github.com/craftcms/cms/issues/5075))
+- It’s no longer necessary to register GraphQL type loaders when creating types.
+- Improved the performance of downloading remote assets. ([#5134](https://github.com/craftcms/cms/pull/5134))
+- The `craft\services\Gql::executeQuery()` method now expects an active schema object, instead of a GraphQL Schema object.
+- The `users/save-user` action no longer copies `unverifiedEmail` validation errors over to the `email` attribute if the `email` attribute already has its own errors.
+- `users/set-password` requests now respond with JSON if the request accepts a JSON response. ([#5138](https://github.com/craftcms/cms/pull/5138))
+
+### Deprecated
+- Deprecated the `$checkToken` argument for `craft\gql\base\Query::getQueries()`. `craft\helpers\Gql::getFullAccessSchema()` should be used instead to ensure all queries are returned.
+
+### Fixed
+- Fixed a bug that could occur when using plugin specific config files while running functional tests. ([#5137](https://github.com/craftcms/cms/pull/5137))
+- Fixed an error that occurred when loading a relational field’s selection modal, if no sources were visible.
+- Fixed a bug where required relational fields would get a validation error if only elements from other sites were selected. ([#5116](https://github.com/craftcms/cms/issues/5116))
+- Fixed a bug where the “Profile Twig templates when Dev Mode is disabled” admin preference wasn’t saving. ([#5118](https://github.com/craftcms/cms/pull/5118))
+- Fixed a bug where failed queue jobs were losing their `dateReserved`, `timeUpdated`, `progress`, and `progressLabel` values.
+- Fixed a PHP error occurred when viewing the PHP Info utility if `register_argc_argv` was set to `On` in `php.ini`. ([#4878](https://github.com/craftcms/cms/issues/4878))
+- Fixed a bug where the `craft\queue\jobs\UpdateSearchIndex` was ignorning the `siteId` property.
+- Fixed a bug where Craft could attempt to perform transforms on element URLs for elements that were not Assets when using GraphQL.
+
 ## 3.3.11 - 2019-10-16
 
 ### Added

@@ -90,7 +90,6 @@ return [
     'Are you sure you want to delete this group and all its fields?' => 'Voulez-vous vraiment supprimer ce groupe ainsi que tous ses champs?',
     'Are you sure you want to delete this group?' => 'Voulez-vous vraiment supprimer ce groupe?',
     'Are you sure you want to delete this image?' => 'Voulez-vous vraiment supprimer cette image?',
-    'Are you sure you want to delete this photo?' => 'Voulez-vous vraiment supprimer cette photo?',
     'Are you sure you want to delete this route?' => 'Voulez-vous vraiment supprimer cette route?',
     'Are you sure you want to delete “{name}” and all entries that use it?' => 'Voulez-vous vraiment supprimer “{name}” et toutes les entrées qui l’utilisent?',
     'Are you sure you want to delete “{name}” and all its categories?' => 'Voulez-vous vraiment supprimer “{name}” et toutes ses catégories?',
@@ -1500,6 +1499,6 @@ Si vous n’attendiez aucun courriel de ce type, ignorez-le, tout simplement.',
     'Delete them' => 'Supprimer',
     'Keep them' => 'Conserver',
     'View tag group - {tagGroup}' => 'Afficher le groupe d’étiquettes « {tagGroup} »',
-    'Single'=> 'Single',
-    'Channel'=> 'Channel'
+    'Single' => 'Single',
+    'Channel' => 'Channel'
 ];
