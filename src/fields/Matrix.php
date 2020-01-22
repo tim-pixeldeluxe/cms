@@ -33,6 +33,7 @@ use craft\helpers\Gql as GqlHelper;
 use craft\helpers\Json;
 use craft\helpers\StringHelper;
 use craft\models\MatrixBlockType;
+use craft\queue\jobs\ApplyMatrixPropagationMethod;
 use craft\queue\jobs\ResaveElements;
 use craft\services\Elements;
 use craft\validators\ArrayValidator;
@@ -130,7 +131,7 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
 
     /**
      * @var int Whether each site should get its own unique set of blocks
-     * @deprecated in 3.2. Use [[$propagationMethod]] instead
+     * @deprecated in 3.2.0. Use [[$propagationMethod]] instead
      */
     public $localizeBlocks = false;
 
@@ -143,11 +144,6 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
      * @var MatrixBlockType[]|null The block types' fields
      */
     private $_blockTypeFields;
-
-    /**
-     * @var string The old propagation method for this field
-     */
-    private $_oldPropagationMethod;
 
     // Public Methods
     // =========================================================================
@@ -852,12 +848,11 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
             }
         }
 
-        // Set the content table name and remember the original propagation method
+        // Set the content table name
         if ($this->id) {
             $oldField = $fieldsService->getFieldById($this->id);
             if ($oldField instanceof self) {
                 $this->contentTable = $oldField->contentTable;
-                $this->_oldPropagationMethod = $oldField->propagationMethod;
             }
         }
 
@@ -874,18 +869,15 @@ class Matrix extends Field implements EagerLoadingFieldInterface, GqlInlineFragm
         Craft::$app->getMatrix()->saveSettings($this, false);
 
         // If the propagation method just changed, resave all the Matrix blocks
-        if ($this->_oldPropagationMethod && $this->propagationMethod !== $this->_oldPropagationMethod) {
-            Craft::$app->getQueue()->push(new ResaveElements([
-                'elementType' => MatrixBlock::class,
-                'criteria' => [
+        if ($this->oldSettings !== null) {
+            $oldPropagationMethod = $this->oldSettings['propagationMethod'] ?? self::PROPAGATION_METHOD_ALL;
+            if ($this->propagationMethod !== $oldPropagationMethod) {
+                Craft::$app->getQueue()->push(new ApplyMatrixPropagationMethod([
                     'fieldId' => $this->id,
-                    'siteId' => '*',
-                    'unique' => true,
-                    'status' => null,
-                    'enabledForSite' => false,
-                ]
-            ]));
-            $this->_oldPropagationMethod = null;
+                    'oldPropagationMethod' => $oldPropagationMethod,
+                    'newPropagationMethod' => $this->propagationMethod,
+                ]));
+            }
         }
 
         parent::afterSave($isNew);

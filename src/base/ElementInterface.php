@@ -25,12 +25,28 @@ interface ElementInterface extends ComponentInterface
     // =========================================================================
 
     /**
+     * Returns the lowercase version of [[displayName()]].
+     *
+     * @return string
+     * @since 3.3.17
+     */
+    public static function lowerDisplayName(): string;
+
+    /**
      * Returns the plural version of [[displayName()]].
      *
      * @return string
      * @since 3.2.0
      */
     public static function pluralDisplayName(): string;
+
+    /**
+     * Returns the plural, lowercase version of [[displayName()]].
+     *
+     * @return string
+     * @since 3.3.17
+     */
+    public static function pluralLowerDisplayName(): string;
 
     /**
      * Returns the handle that should be used to refer to this element type from reference tags.
@@ -254,10 +270,11 @@ interface ElementInterface extends ComponentInterface
     public static function sources(string $context = null): array;
 
     /**
-     * Returns the available element actions for a given source (if one is provided).
+     * Returns the available [element actions](https://docs.craftcms.com/v3/extend/element-action-types.html) for a
+     * given source.
      *
-     * The actions can either be represented by their class handle (e.g. 'SetStatus'), or by an
-     * [[ElementActionInterface]] instance.
+     * The actions can be represented by their fully qualified class name, a config array with the class name
+     * set to a `type` key, or by an instantiated element action object.
      *
      * ::: tip
      * Element types that extend [[\craft\base\Element]] should override [[\craft\base\Element::defineActions()]]

@@ -24,6 +24,7 @@ use craft\web\UploadedFile;
 use yii\base\ErrorException;
 use yii\base\Exception;
 use yii\web\BadRequestHttpException;
+use yii\web\ForbiddenHttpException;
 use yii\web\HttpException;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
@@ -257,11 +258,11 @@ class AssetsController extends Controller
             throw new BadRequestHttpException('The parent folder cannot be found');
         }
 
-        // Check if it's possible to create subfolders in target Volume.
-        $this->_requirePermissionByFolder('createFoldersInVolume',
-            $parentFolder);
-
         try {
+
+            // Check if it's possible to create subfolders in target Volume.
+            $this->_requirePermissionByFolder('createFoldersInVolume', $parentFolder);
+
             $folderModel = new VolumeFolder();
             $folderModel->name = $folderName;
             $folderModel->parentId = $parentId;
@@ -277,6 +278,8 @@ class AssetsController extends Controller
                 'folderId' => $folderModel->id
             ]);
         } catch (AssetException $exception) {
+            return $this->asErrorJson($exception->getMessage());
+        } catch (ForbiddenHttpException $exception) {
             return $this->asErrorJson($exception->getMessage());
         }
     }
@@ -866,9 +869,12 @@ class AssetsController extends Controller
         if ($transformId) {
             $transformIndexModel = $assetTransforms->getTransformIndexModelById($transformId);
         } else {
-            $assetId = $request->getBodyParam('assetId');
-            $handle = $request->getBodyParam('handle');
+            $assetId = $request->getRequiredBodyParam('assetId');
+            $handle = $request->getRequiredBodyParam('handle');
             $assetModel = Craft::$app->getAssets()->getAssetById($assetId);
+            if ($assetModel === null) {
+                throw new BadRequestHttpException('Invalid asset ID: ' . $assetId);
+            }
             $transformIndexModel = $assetTransforms->getTransformIndex($assetModel, $handle);
         }
 

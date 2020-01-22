@@ -63,9 +63,9 @@ class Cp
                     $alerts[] = Craft::t('app', 'Your Craft license key is invalid.');
                 } else if (Craft::$app->getHasWrongEdition()) {
                     $message = Craft::t('app', 'You’re running Craft {edition} with a Craft {licensedEdition} license.', [
-                        'edition' => Craft::$app->getEditionName(),
-                        'licensedEdition' => Craft::$app->getLicensedEditionName()
-                    ]) . ' ';
+                            'edition' => Craft::$app->getEditionName(),
+                            'licensedEdition' => Craft::$app->getLicensedEditionName()
+                        ]) . ' ';
                     if ($user->admin) {
                         if ($generalConfig->allowAdminChanges) {
                             $message .= '<a class="go" href="' . UrlHelper::url('plugin-store/upgrade-craft') . '">' . Craft::t('app', 'Resolve') . '</a>';
@@ -150,6 +150,18 @@ class Cp
                     $alerts[] = $message;
                 }
             }
+        }
+
+        // Display a warning if admin changes are allowed, and project.yaml is being used but not writable
+        if (
+            $user->admin &&
+            $generalConfig->allowAdminChanges &&
+            $generalConfig->useProjectConfigFile &&
+            !FileHelper::isWritable(Craft::$app->getPath()->getProjectConfigFilePath())
+        ) {
+            $alerts[] = Craft::t('app', 'Your {file} file isn’t writable.', [
+                'file' => \craft\services\ProjectConfig::CONFIG_FILENAME,
+            ]);
         }
 
         // Give plugins a chance to add their own alerts
