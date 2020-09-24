@@ -10,7 +10,9 @@ namespace craft\console\controllers;
 use Composer\IO\BufferIO;
 use Craft;
 use craft\console\Controller;
+use craft\elements\User;
 use craft\errors\InvalidPluginException;
+use craft\helpers\App;
 use craft\helpers\Console;
 use craft\helpers\FileHelper;
 use craft\helpers\Json;
@@ -20,6 +22,7 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 use yii\base\InvalidConfigException;
 use yii\console\ExitCode;
+use yii\validators\EmailValidator;
 
 /**
  * Updates Craft and plugins.
@@ -29,9 +32,6 @@ use yii\console\ExitCode;
  */
 class UpdateController extends Controller
 {
-    // Properties
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -56,9 +56,6 @@ class UpdateController extends Controller
      * @var string|null The path to the database backup
      */
     private $_backupPath;
-
-    // Public Methods
-    // =========================================================================
 
     /**
      * @inheritdoc
@@ -91,6 +88,11 @@ class UpdateController extends Controller
      */
     public function actionInfo(): int
     {
+        // Make sure they have a valid Craft license
+        if (($exitCode = $this->_checkCraftLicense()) !== null) {
+            return $exitCode;
+        }
+
         $updates = $this->_getUpdates();
 
         if (($total = $updates->getTotal()) === 0) {
@@ -152,6 +154,11 @@ class UpdateController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
+        // Make sure they have a valid Craft license
+        if (($exitCode = $this->_checkCraftLicense()) !== null) {
+            return $exitCode;
+        }
+
         // Figure out the new requirements
         $requirements = $this->_getRequirements(...$handles);
         if (empty($requirements)) {
@@ -206,9 +213,6 @@ class UpdateController extends Controller
         $this->stdout('done' . PHP_EOL, Console::FG_GREEN);
         return ExitCode::OK;
     }
-
-    // Public Methods
-    // =========================================================================
 
     /**
      * Returns whether updates are allowed.
@@ -450,7 +454,7 @@ class UpdateController extends Controller
         }
 
         try {
-            $script = Craft::$app->getRequest()->getScriptFile();
+            $script = $this->request->getScriptFile();
         } catch (InvalidConfigException $e) {
             $this->stderr('Can’t apply new migrations: ' . $e->getMessage() . PHP_EOL, Console::FG_RED);
             $this->stdout('You can apply new migrations manually by running ');
@@ -461,7 +465,8 @@ class UpdateController extends Controller
 
         $this->stdout('Applying new migrations ... ', Console::FG_YELLOW);
 
-        $process = new Process([$script, 'migrate/all', '--no-content']);
+        $process = new Process([$script, 'migrate/all', '--no-backup', '--no-content']);
+        $process->setTimeout(null);
         try {
             $process->mustRun();
         } catch (ProcessFailedException $e) {
@@ -540,7 +545,7 @@ class UpdateController extends Controller
         FileHelper::writeToFile($composerService->getLockPath(), $lockContents);
 
         try {
-            $script = Craft::$app->getRequest()->getScriptFile();
+            $script = $this->request->getScriptFile();
         } catch (InvalidConfigException $e) {
             $this->stderr('Can’t revert Composer changes: ' . $e->getMessage() . PHP_EOL, Console::FG_RED);
             $this->stdout('You can revert Composer changes manually by running ');
@@ -552,6 +557,7 @@ class UpdateController extends Controller
         $this->stdout('Reverting Composer changes ... ', Console::FG_YELLOW);
 
         $process = new Process([$script, 'update/composer-install']);
+        $process->setTimeout(null);
         try {
             $process->mustRun();
         } catch (ProcessFailedException $e) {
@@ -592,6 +598,52 @@ class UpdateController extends Controller
         }
 
         $this->stdout(PHP_EOL);
+    }
+
+    /**
+     * Ensures that there is a valid Craft license.
+     *
+     * @return int|null
+     */
+    private function _checkCraftLicense()
+    {
+        if (!App::licenseKey()) {
+            if (defined('CRAFT_LICENSE_KEY')) {
+                $this->stderr('The license key defined by the CRAFT_LICENSE_KEY PHP constant is invalid.' . PHP_EOL, Console::FG_RED);
+                return ExitCode::UNSPECIFIED_ERROR;
+            }
+
+            $this->stdout('No license key found.' . PHP_EOL, Console::FG_YELLOW);
+            $session = Craft::$app->getUser();
+            $user = $session->getIdentity();
+
+            if (!$user) {
+                $email = $this->prompt('Enter your email address to request a new license key:', [
+                    'validator' => function(string $input, string &$error = null) {
+                        return (new EmailValidator())->validate($input, $error);
+                    }
+                ]);
+                $session->setIdentity(new User([
+                    'email' => $email,
+                ]));
+            }
+
+            $this->stdout('Requesting license... ');
+            Craft::$app->getApi()->getLicenseInfo();
+
+            if (!$user) {
+                $session->setIdentity(null);
+            }
+
+            if (!App::licenseKey()) {
+                $this->stderr('License key creation was unsuccessful.' . PHP_EOL, Console::FG_RED);
+                return ExitCode::UNSPECIFIED_ERROR;
+            }
+
+            $this->stdout('success!' . PHP_EOL . PHP_EOL, Console::FG_GREEN);
+        }
+
+        return null;
     }
 
     /**

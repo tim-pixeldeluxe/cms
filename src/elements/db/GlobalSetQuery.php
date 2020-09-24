@@ -21,6 +21,7 @@ use yii\db\Connection;
  * @method GlobalSet|array|null nth(int $n, Connection $db = null)
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @since 3.0.0
+ * @doc-path globals.md
  * @supports-site-params
  * @replace {element} global set
  * @replace {elements} global sets
@@ -30,9 +31,6 @@ use yii\db\Connection;
  */
 class GlobalSetQuery extends ElementQuery
 {
-    // Properties
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -52,9 +50,6 @@ class GlobalSetQuery extends ElementQuery
      * @used-by handle()
      */
     public $handle;
-
-    // Public Methods
-    // =========================================================================
 
     /**
      * Sets the [[$editable]] property.
@@ -107,9 +102,6 @@ class GlobalSetQuery extends ElementQuery
         return $this;
     }
 
-    // Protected Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -132,9 +124,6 @@ class GlobalSetQuery extends ElementQuery
 
         return parent::beforePrepare();
     }
-
-    // Private Methods
-    // =========================================================================
 
 
     /**

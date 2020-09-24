@@ -217,8 +217,10 @@ Craft.BaseElementSelectInput = Garnish.Base.extend(
                 }
             }
 
-            $elements.find('.delete').on('click', $.proxy(function(ev) {
+            $elements.find('.delete').on('click dblclick', $.proxy(function(ev) {
                 this.removeElement($(ev.currentTarget).closest('.element'));
+                // Prevent this from acting as one of a double-click
+                ev.stopPropagation();
             }, this));
 
             this.$elements = this.$elements.add($elements);
@@ -282,7 +284,19 @@ Craft.BaseElementSelectInput = Garnish.Base.extend(
                 animateCss['margin-bottom'] = -($element.outerHeight() + parseInt($element.css('margin-bottom')));
             }
 
-            $element.velocity(animateCss, Craft.BaseElementSelectInput.REMOVE_FX_DURATION, callback);
+            // Pause the draft editor
+            if (window.draftEditor) {
+                window.draftEditor.pause();
+            }
+
+            $element.velocity(animateCss, Craft.BaseElementSelectInput.REMOVE_FX_DURATION, () => {
+                callback();
+
+                // Resume the draft editor
+                if (window.draftEditor) {
+                    window.draftEditor.resume();
+                }
+            });
         },
 
         showModal: function() {
@@ -329,8 +343,12 @@ Craft.BaseElementSelectInput = Garnish.Base.extend(
         getDisabledElementIds: function() {
             var ids = this.getSelectedElementIds();
 
-            if (this.settings.sourceElementId) {
+            if (!this.settings.allowSelfRelations && this.settings.sourceElementId) {
                 ids.push(this.settings.sourceElementId);
+            }
+
+            if (this.settings.disabledElementIds) {
+                ids.push(...this.settings.disabledElementIds);
             }
 
             return ids;
@@ -351,13 +369,16 @@ Craft.BaseElementSelectInput = Garnish.Base.extend(
         },
 
         selectElements: function(elements) {
-            for (var i = 0; i < elements.length; i++) {
-                var elementInfo = elements[i],
+            for (let i = 0; i < elements.length; i++) {
+                let elementInfo = elements[i],
                     $element = this.createNewElement(elementInfo);
 
                 this.appendElement($element);
                 this.addElements($element);
                 this.animateElementIntoPlace(elementInfo.$element, $element);
+
+                // Override the element reference with the new one
+                elementInfo.$element = $element;
             }
 
             this.onSelectElements(elements);
@@ -445,7 +466,9 @@ Craft.BaseElementSelectInput = Garnish.Base.extend(
             elementType: null,
             sources: null,
             criteria: {},
+            allowSelfRelations: false,
             sourceElementId: null,
+            disabledElementIds: null,
             viewMode: 'list',
             limit: null,
             showSiteMenu: false,

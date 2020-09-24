@@ -25,9 +25,6 @@ class ArgumentPreparationTest extends Unit
     {
     }
 
-    // Tests
-    // =========================================================================
-
     /**
      * Test an arrayable string is split by comma
      *
@@ -43,13 +40,10 @@ class ArgumentPreparationTest extends Unit
     }
 
 
-    // Data Providers
-    // =========================================================================
-
     public function argumentPreparationDataProvider()
     {
         return [
-            [['siteId' => '8, 12, 44'], ['siteId' => [8,12,44]], true],
+            [['siteId' => '8, 12, 44'], ['siteId' => [8, 12, 44]], true],
             [['siteId' => 'not*'], ['siteId' => ['not*']], false],
             [['siteId' => 'not*'], ['siteId' => 'not*'], true],
             [['siteId' => '*'], ['siteId' => '*'], true],

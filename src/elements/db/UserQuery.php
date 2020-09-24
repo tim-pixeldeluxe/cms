@@ -25,6 +25,7 @@ use yii\db\Connection;
  * @method User|array|null nth(int $n, Connection $db = null)
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @since 3.0.0
+ * @doc-path users.md
  * @supports-status-param
  * @replace {element} user
  * @replace {elements} users
@@ -34,9 +35,6 @@ use yii\db\Connection;
  */
 class UserQuery extends ElementQuery
 {
-    // Properties
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -75,6 +73,12 @@ class UserQuery extends ElementQuery
     public $admin;
 
     /**
+     * @var bool|null Whether to only return users that have (or don’t have) user photos.
+     * @used-by hasPhoto()
+     */
+    public $hasPhoto;
+
+    /**
      * @var string|int|false|null The permission that the resulting users must have.
      * ---
      * ```php
@@ -84,7 +88,7 @@ class UserQuery extends ElementQuery
      *     ->all();
      * ```
      * ```twig
-     * {# fetch users with CP access #}
+     * {# fetch users with control panel access #}
      * {% set admins = craft.users()
      *     .can('accessCp')
      *     .all() %}
@@ -143,9 +147,6 @@ class UserQuery extends ElementQuery
      */
     public $lastLoginDate;
 
-    // Public Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -201,21 +202,50 @@ class UserQuery extends ElementQuery
     }
 
     /**
-     * Narrows the query results to only users that have a certain user permission, either directly on the user account or through one of their user groups.
-     *
-     * See [Users](https://docs.craftcms.com/v3/users.html) for a full list of available user permissions defined by Craft.
+     * Narrows the query results to only users that have (or don’t have) a user photo.
      *
      * ---
      *
      * ```twig
-     * {# Fetch users that can access the Control Panel #}
+     * {# Fetch users with photos #}
+     * {% set {elements-var} = {twig-method}
+     *     .hasPhoto()
+     *     .all() %}
+     * ```
+     *
+     * ```php
+     * // Fetch users without photos
+     * ${elements-var} = {element-class}::find()
+     *     ->hasPhoto()
+     *     ->all();
+     * ```
+     *
+     * @param bool $value The property value (defaults to true)
+     * @return static self reference
+     * @uses $hasPhoto
+     */
+    public function hasPhoto(bool $value = true)
+    {
+        $this->hasPhoto = $value;
+        return $this;
+    }
+
+    /**
+     * Narrows the query results to only users that have a certain user permission, either directly on the user account or through one of their user groups.
+     *
+     * See [User Management](https://craftcms.com/docs/3.x/user-management.html) for a full list of available user permissions defined by Craft.
+     *
+     * ---
+     *
+     * ```twig
+     * {# Fetch users that can access the control panel #}
      * {% set {elements-var} = {twig-method}
      *     .can('accessCp')
      *     .all() %}
      * ```
      *
      * ```php
-     * // Fetch users that can access the Control Panel
+     * // Fetch users that can access the control panel
      * ${elements-var} = {element-class}::find()
      *     ->can('accessCp')
      *     ->all();
@@ -545,9 +575,6 @@ class UserQuery extends ElementQuery
         return parent::status($value);
     }
 
-    // Protected Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -589,6 +616,15 @@ class UserQuery extends ElementQuery
 
         if (is_bool($this->admin)) {
             $this->subQuery->andWhere(['users.admin' => $this->admin]);
+        }
+
+        if (is_bool($this->hasPhoto)) {
+            if ($this->hasPhoto) {
+                $hasPhotoCondition = ['not', ['users.photoId' => null]];
+            } else {
+                $hasPhotoCondition = ['users.photoId' => null];
+            }
+            $this->subQuery->andWhere($hasPhotoCondition);
         }
 
         if ($this->admin !== true) {
@@ -657,9 +693,6 @@ class UserQuery extends ElementQuery
         }
     }
 
-    // Private Methods
-    // =========================================================================
-
     /**
      * Applies the 'can' param to the query being prepared.
      *
@@ -692,8 +725,8 @@ class UserQuery extends ElementQuery
             // Get the users that have that permission via a user group
             $permittedUserIdsViaGroups = (new Query())
                 ->select(['g_u.userId'])
-                ->from(['{{%usergroups_users}} g_u'])
-                ->innerJoin('{{%userpermissions_usergroups}} p_g', '[[p_g.groupId]] = [[g_u.groupId]]')
+                ->from(['g_u' => Table::USERGROUPS_USERS])
+                ->innerJoin(['p_g' => Table::USERPERMISSIONS_USERGROUPS], '[[p_g.groupId]] = [[g_u.groupId]]')
                 ->where(['p_g.permissionId' => $this->can])
                 ->column();
 

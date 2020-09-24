@@ -10,7 +10,7 @@ namespace craft\test;
 use Codeception\Exception\ConfigurationException;
 use Codeception\Lib\Connector\Yii2;
 use Craft;
-use craft\base\Plugin;
+use craft\base\PluginInterface;
 use craft\errors\InvalidPluginException;
 use craft\web\View;
 use yii\base\Module;
@@ -26,16 +26,10 @@ use yii\web\Application;
  */
 class CraftConnector extends Yii2
 {
-    // Public Properties
-    // =========================================================================
-
     /**
-     * @var array|MessageInterface
+     * @var array
      */
-    protected $emails;
-
-    // Public Methods
-    // =========================================================================
+    protected $emails = [];
 
     /**
      * @inheritdoc
@@ -67,17 +61,18 @@ class CraftConnector extends Yii2
     }
 
     /**
-     *
+     * @inheritdoc
      */
-    public function startApp()
+    protected function mockMailer(array $config)
     {
-        parent::startApp();
-
-        Craft::$app->set('mailer', [
+        $config = parent::mockMailer($config);
+        $config['components']['mailer'] = array_merge($config['components']['mailer'], [
             'class' => TestMailer::class, 'callback' => function(MessageInterface $message) {
                 $this->emails[] = $message;
             }
         ]);
+
+        return $config;
     }
 
     /**
@@ -97,7 +92,7 @@ class CraftConnector extends Yii2
             $moduleClass = get_class($module);
             $moduleId = $module->id;
 
-            if ($module instanceof Plugin) {
+            if ($module instanceof PluginInterface) {
                 $plugins = Craft::$app->getPlugins();
 
                 // Follow the same error handling as Craft does natively.

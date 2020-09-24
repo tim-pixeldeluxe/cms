@@ -8,24 +8,28 @@
 namespace craft\elements\db;
 
 use Craft;
-use craft\base\Volume;
+use craft\base\VolumeInterface;
 use craft\db\Query;
 use craft\db\Table;
 use craft\elements\Asset;
+use craft\elements\User;
+use craft\helpers\ArrayHelper;
 use craft\helpers\Assets;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
+use yii\base\InvalidArgumentException;
 use yii\db\Connection;
 
 /**
  * AssetQuery represents a SELECT SQL statement for assets in a way that is independent of DBMS.
  *
- * @property string|string[]|Volume $volume The handle(s) of the volume(s) that resulting assets must belong to.
+ * @property string|string[]|VolumeInterface $volume The handle(s) of the volume(s) that resulting assets must belong to.
  * @method Asset[]|array all($db = null)
  * @method Asset|array|null one($db = null)
  * @method Asset|array|null nth(int $n, Connection $db = null)
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @since 3.0.0
+ * @doc-path assets.md
  * @supports-site-params
  * @supports-title-param
  * @replace {element} asset
@@ -36,14 +40,33 @@ use yii\db\Connection;
  */
 class AssetQuery extends ElementQuery
 {
-    // Properties
-    // =========================================================================
+    /**
+     * @var bool
+     * @see _supportsUploaderParam()
+     */
+    private static $_supportsUploaderParam;
+
+    /**
+     * Returns whether the `uploader` param is supported yet.
+     *
+     * @return bool
+     * @todo remove after next beakpoint
+     */
+    private static function _supportsUploaderParam(): bool
+    {
+        if (self::$_supportsUploaderParam !== null) {
+            return self::$_supportsUploaderParam;
+        }
+
+        $schemaVersion = Craft::$app->getInstalledSchemaVersion();
+        return self::$_supportsUploaderParam = version_compare($schemaVersion, '3.4.5', '>=');
+    }
 
     // General parameters
     // -------------------------------------------------------------------------
 
     /**
-     * @var int|int[]|null The volume ID(s) that the resulting assets must be in.
+     * @var int|int[]|string|null The volume ID(s) that the resulting assets must be in.
      * ---
      * ```php
      * // fetch assets in the Logos volume
@@ -67,6 +90,13 @@ class AssetQuery extends ElementQuery
      * @used-by folderId()
      */
     public $folderId;
+
+    /**
+     * @var int|null The user ID that the resulting assets must have been uploaded by.
+     * @used-by uploader()
+     * @since 3.4.0
+     */
+    public $uploaderId;
 
     /**
      * @var string|string[]|null The filename(s) that the resulting assets must have.
@@ -197,9 +227,6 @@ class AssetQuery extends ElementQuery
      */
     public $withTransforms;
 
-    // Public Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -223,7 +250,7 @@ class AssetQuery extends ElementQuery
      * | `'not foo'` | not in a volume with a handle of `foo`.
      * | `['foo', 'bar']` | in a volume with a handle of `foo` or `bar`.
      * | `['not', 'foo', 'bar']` | not in a volume with a handle of `foo` or `bar`.
-     * | a [[Volume|Volume]] object | in a volume represented by the object.
+     * | a [[VolumeInterface|volume]] object | in a volume represented by the object.
      *
      * ---
      *
@@ -241,14 +268,14 @@ class AssetQuery extends ElementQuery
      *     ->all();
      * ```
      *
-     * @param string|string[]|Volume|null $value The property value
+     * @param string|string[]|VolumeInterface|null $value The property value
      * @return static self reference
      * @uses $volumeId
      */
     public function volume($value)
     {
-        if ($value instanceof Volume) {
-            $this->volumeId = $value->id;
+        if ($value instanceof VolumeInterface) {
+            $this->volumeId = [$value->id];
         } else if ($value !== null) {
             $this->volumeId = (new Query())
                 ->select(['id'])
@@ -266,13 +293,13 @@ class AssetQuery extends ElementQuery
     /**
      * Narrows the query results based on the volume the assets belong to.
      *
-     * @param string|string[]|Volume $value The property value
+     * @param string|string[]|VolumeInterface $value The property value
      * @return static self reference
      * @deprecated in 3.0.0. Use [[volume()]] instead.
      */
     public function source($value)
     {
-        Craft::$app->getDeprecator()->log('AssetQuery::source()', 'The “source” asset query param has been deprecated. Use “volume” instead.');
+        Craft::$app->getDeprecator()->log('AssetQuery::source()', 'The `source` asset query param has been deprecated. Use `volume` instead.');
 
         return $this->volume($value);
     }
@@ -288,6 +315,7 @@ class AssetQuery extends ElementQuery
      * | `'not 1'` | not in a volume with an ID of 1.
      * | `[1, 2]` | in a volume with an ID of 1 or 2.
      * | `['not', 1, 2]` | not in a volume with an ID of 1 or 2.
+     * | `':empty:'` | that haven’t been stored in a volume yet
      *
      * ---
      *
@@ -305,7 +333,7 @@ class AssetQuery extends ElementQuery
      *     ->all();
      * ```
      *
-     * @param int|int[]|null $value The property value
+     * @param int|int[]|string|null $value The property value
      * @return static self reference
      * @uses $volumeId
      */
@@ -324,7 +352,7 @@ class AssetQuery extends ElementQuery
      */
     public function sourceId($value)
     {
-        Craft::$app->getDeprecator()->log('AssetQuery::sourceId()', 'The “sourceId” asset query param has been deprecated. Use “volumeId” instead.');
+        Craft::$app->getDeprecator()->log('AssetQuery::sourceId()', 'The `sourceId` asset query param has been deprecated. Use `volumeId` instead.');
 
         return $this->volumeId($value);
     }
@@ -370,6 +398,49 @@ class AssetQuery extends ElementQuery
     public function folderId($value)
     {
         $this->folderId = $value;
+        return $this;
+    }
+
+    /**
+     * Narrows the query results based on the user the assets were uploaded by, per the user’s IDs.
+     *
+     * Possible values include:
+     *
+     * | Value | Fetches assets…
+     * | - | -
+     * | `1` | uploaded by the user with an ID of 1.
+     * | a [[User]] object | uploaded by the user represented by the object.
+     *
+     * ---
+     *
+     * ```twig
+     * {# Fetch assets uploaded by the user with an ID of 1 #}
+     * {% set {elements-var} = {twig-method}
+     *     .uploader(1)
+     *     .all() %}
+     * ```
+     *
+     * ```php
+     * // Fetch assets uploaded by the user with an ID of 1
+     * ${elements-var} = {php-method}
+     *     ->uploader(1)
+     *     ->all();
+     * ```
+     *
+     * @param int|User|null $value The property value
+     * @return static self reference
+     * @uses $uploaderId
+     * @since 3.4.0
+     */
+    public function uploader($value)
+    {
+        if ($value instanceof User) {
+            $this->uploaderId = $value->id;
+        } else if (is_numeric($value)) {
+            $this->uploaderId = $value;
+        } else {
+            throw new InvalidArgumentException('Invalid uploader value');
+        }
         return $this;
     }
 
@@ -672,6 +743,25 @@ class AssetQuery extends ElementQuery
      * This can improve performance when displaying several image transforms at once, if the transforms
      * have already been generated.
      *
+     * Transforms can be specified as their handle or an object that contains `width` and/or `height` properties.
+     *
+     * You can include `srcset`-style sizes (e.g. `100w` or `2x`) following a normal transform definition, for example:
+     *
+     * ::: code
+     *
+     * ```twig
+     * [{width: 1000, height: 600}, '1.5x', '2x', '3x']
+     * ```
+     *
+     * ```php
+     * [['width' => 1000, 'height' => 600], '1.5x', '2x', '3x']
+     * ```
+     *
+     * :::
+     *
+     * When a `srcset`-style size is encountered, the preceding normal transform definition will be used as a
+     * reference when determining the resulting transform dimensions.
+     *
      * ---
      *
      * ```twig
@@ -720,21 +810,18 @@ class AssetQuery extends ElementQuery
         return $elements;
     }
 
-    // Protected Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
     protected function beforePrepare(): bool
     {
-        // See if 'source' was set to an invalid handle
+        // See if 'volume' was set to an invalid handle
         if ($this->volumeId === []) {
             return false;
         }
 
         $this->joinElementTable('assets');
-        $this->query->innerJoin('{{%volumefolders}} volumeFolders', '[[assets.folderId]] = [[volumeFolders.id]]');
+        $this->query->innerJoin(['volumeFolders' => Table::VOLUMEFOLDERS], '[[volumeFolders.id]] = [[assets.folderId]]');
 
         $this->query->select([
             'assets.volumeId',
@@ -750,8 +837,17 @@ class AssetQuery extends ElementQuery
             'volumeFolders.path AS folderPath'
         ]);
 
+        if (self::_supportsUploaderParam()) {
+            $this->query->addSelect('assets.uploaderId');
+        }
+
+        $this->_normalizeVolumeId();
         if ($this->volumeId) {
-            $this->subQuery->andWhere(Db::parseParam('assets.volumeId', $this->volumeId));
+            if ($this->volumeId === ':empty:') {
+                $this->subQuery->andWhere(['assets.volumeId' => null]);
+            } else {
+                $this->subQuery->andWhere(['assets.volumeId' => $this->volumeId]);
+            }
         }
 
         if ($this->folderId) {
@@ -762,6 +858,10 @@ class AssetQuery extends ElementQuery
                 $folderCondition = ['or', $folderCondition, ['in', 'assets.folderId', array_keys($descendants)]];
             }
             $this->subQuery->andWhere($folderCondition);
+        }
+
+        if (self::_supportsUploaderParam() && $this->uploaderId) {
+            $this->subQuery->andWhere(['uploaderId' => $this->uploaderId]);
         }
 
         if ($this->filename) {
@@ -798,5 +898,42 @@ class AssetQuery extends ElementQuery
         }
 
         return parent::beforePrepare();
+    }
+
+    /**
+     * Normalizes the volumeId param to an array of IDs or null
+     */
+    private function _normalizeVolumeId()
+    {
+        if ($this->volumeId === ':empty:') {
+            return;
+        }
+
+        if (empty($this->volumeId)) {
+            $this->volumeId = null;
+        } else if (is_numeric($this->volumeId)) {
+            $this->volumeId = [$this->volumeId];
+        } else if (!is_array($this->volumeId) || !ArrayHelper::isNumeric($this->volumeId)) {
+            $this->volumeId = (new Query())
+                ->select(['id'])
+                ->from([Table::VOLUMES])
+                ->where(Db::parseParam('id', $this->volumeId))
+                ->column();
+        }
+    }
+
+    /**
+     * @inheritdoc
+     * @since 3.5.0
+     */
+    protected function cacheTags(): array
+    {
+        $tags = [];
+        if ($this->volumeId && $this->volumeId !== ':empty:') {
+            foreach ($this->volumeId as $volumeId) {
+                $tags[] = "volume:$volumeId";
+            }
+        }
+        return $tags;
     }
 }

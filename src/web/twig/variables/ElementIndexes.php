@@ -18,9 +18,6 @@ use Craft;
  */
 class ElementIndexes
 {
-    // Public Methods
-    // =========================================================================
-
     /**
      * Returns the element index sources in the custom groupings/order.
      *
@@ -30,7 +27,7 @@ class ElementIndexes
      */
     public function getSources(string $elementTypeClass, string $context = 'index'): array
     {
-        Craft::$app->getDeprecator()->log('craft.elementIndexes.getSources()', 'craft.elementIndexes.getSources() has been deprecated. Use craft.app.elementIndexes.sources instead.');
+        Craft::$app->getDeprecator()->log('craft.elementIndexes.getSources()', '`craft.elementIndexes.getSources()` has been deprecated. Use `craft.app.elementIndexes.sources` instead.');
 
         return Craft::$app->getElementIndexes()->getSources($elementTypeClass, $context);
     }

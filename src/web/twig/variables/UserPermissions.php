@@ -20,9 +20,6 @@ Craft::$app->requireEdition(Craft::Pro);
  */
 class UserPermissions
 {
-    // Public Methods
-    // =========================================================================
-
     /**
      * Returns all of the known permissions, sorted by category.
      *
@@ -30,7 +27,7 @@ class UserPermissions
      */
     public function getAllPermissions(): array
     {
-        Craft::$app->getDeprecator()->log('craft.userPermissions.getAllPermissions()', 'craft.userPermissions.getAllPermissions() has been deprecated. Use craft.app.userPermissions.allPermissions instead.');
+        Craft::$app->getDeprecator()->log('craft.userPermissions.getAllPermissions()', '`craft.userPermissions.getAllPermissions()` has been deprecated. Use `craft.app.userPermissions.allPermissions` instead.');
 
         return Craft::$app->getUserPermissions()->getAllPermissions();
     }
@@ -43,7 +40,7 @@ class UserPermissions
      */
     public function getGroupPermissionsByUserId(int $userId): array
     {
-        Craft::$app->getDeprecator()->log('craft.userPermissions.getGroupPermissionsByUserId()', 'craft.userPermissions.getGroupPermissionsByUserId() has been deprecated. Use craft.app.userPermissions.getGroupPermissionsByUserId() instead.');
+        Craft::$app->getDeprecator()->log('craft.userPermissions.getGroupPermissionsByUserId()', '`craft.userPermissions.getGroupPermissionsByUserId()` has been deprecated. Use `craft.app.userPermissions.getGroupPermissionsByUserId()` instead.');
 
         return Craft::$app->getUserPermissions()->getGroupPermissionsByUserId($userId);
     }

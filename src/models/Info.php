@@ -18,9 +18,6 @@ use craft\base\Model;
  */
 class Info extends Model
 {
-    // Properties
-    // =========================================================================
-
     /**
      * @var int|null ID
      */
@@ -42,19 +39,15 @@ class Info extends Model
     public $maintenance = false;
 
     /**
-     * @var string Serialized configuration
-     */
-    public $config = '';
-
-    /**
-     * @var string JSON array of configuration map of UIDs to location in configuration
-     */
-    public $configMap = '';
-
-    /**
      * @var string|null Uid
      */
     public $uid;
+
+    /**
+     * @var string Field version
+     * @since 3.5.6
+     */
+    public $configVersion = '000000000000';
 
     /**
      * @var string Field version
@@ -71,15 +64,12 @@ class Info extends Model
      */
     public $dateCreated;
 
-    // Public Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
-    public function rules()
+    protected function defineRules(): array
     {
-        $rules = parent::rules();
+        $rules = parent::defineRules();
         $rules[] = [['id'], 'number', 'integerOnly' => true];
         $rules[] = [['version', 'schemaVersion'], 'required'];
         return $rules;

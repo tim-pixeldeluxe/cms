@@ -35,9 +35,6 @@ use yii\base\Exception;
  */
 class ViewTest extends TestCase
 {
-    // Public Properties
-    // =========================================================================
-
     /**
      * @var UnitTester
      */
@@ -47,9 +44,6 @@ class ViewTest extends TestCase
      * @var View
      */
     protected $view;
-
-    // Public Methods
-    // =========================================================================
 
     /**
      * @return array
@@ -62,9 +56,6 @@ class ViewTest extends TestCase
             ]
         ];
     }
-
-    // Tests
-    // =========================================================================
 
     /**
      * @dataProvider normalizeObjectTemplateDataProvider
@@ -269,14 +260,14 @@ class ViewTest extends TestCase
         Craft::$app->language = 'nl';
 
         // Basic test that register translations gets rendered
-        $js = $this->_generateTranslationJs('app', ['1 month' => '1 maand', '1 minute' => '1 minuut']);
+        $js = $this->_generateTranslationJs('app', ['Save' => 'Bewaren', 'Cancel' => 'Afbreken']);
         $this->_assertRegisterJsInputValues($js, View::POS_BEGIN);
-        $this->view->registerTranslations('app', ['1 month', '1 minute']);
+        $this->view->registerTranslations('app', ['Save', 'Cancel']);
 
         // Non existing translations get ignored
-        $js = $this->_generateTranslationJs('app', ['1 month' => '1 maand']);
+        $js = $this->_generateTranslationJs('app', ['Save' => 'Bewaren']);
         $this->_assertRegisterJsInputValues($js, View::POS_BEGIN);
-        $this->view->registerTranslations('app', ['1 month', 'not an existing translation23131321313']);
+        $this->view->registerTranslations('app', ['Save', 'not an existing translation23131321313']);
     }
 
     /**
@@ -389,9 +380,6 @@ class ViewTest extends TestCase
         $this->_registeredJs('randomprop', ['name' => 'value']);
     }
 
-    // Data Providers
-    // =========================================================================
-
     /**
      * @return array
      */
@@ -407,7 +395,14 @@ class ViewTest extends TestCase
             ['{{ (_variables.foo ?? object.foo).fn({bar: baz})|raw }}', '{foo.fn({bar: baz})}'],
             ['{{ (_variables.foo ?? object.foo).fn({bar: {baz: 1}})|raw }}', '{foo.fn({bar: {baz: 1}})}'],
             ['{{ (_variables.foo ?? object.foo).fn(\'bar:baz\')|raw }}', '{foo.fn(\'bar:baz\')}'],
-            ['{{ (_variables.foo ?? object.foo).fn({\'bar\': baz})|raw }}', '{foo.fn({\'bar\': baz})}']
+            ['{{ (_variables.foo ?? object.foo).fn({\'bar\': baz})|raw }}', '{foo.fn({\'bar\': baz})}'],
+            ['{% verbatim %}`{foo}`{% endverbatim %}', '`{foo}`'],
+            ["{% verbatim %}`{foo}\n{bar}`{% endverbatim %}", "`{foo}\n{bar}`"],
+            ["{% verbatim %}```\n{% exit %}\n```{% endverbatim %}", "```\n{% exit %}\n```"],
+            ["{% verbatim %}````\n{% exit %}\n````{% endverbatim %}", "````\n{% exit %}\n````"],
+            ["{% verbatim %}\n{foo}\n{% endverbatim %}", "{% verbatim %}\n{foo}\n{% endverbatim %}"],
+            ["{%- verbatim -%}\n{foo}\n{%- endverbatim -%}", "{%- verbatim -%}\n{foo}\n{%- endverbatim -%}"],
+            ['{{ clone(productCategory).level(1).one().slug|raw }}', '{clone(productCategory).level(1).one().slug}'],
         ];
     }
 
@@ -481,6 +476,9 @@ class ViewTest extends TestCase
 
             // Test that model params dont override variable params.
             ['IM DIFFERENTExample Param', '{ exampleParam }{ object.exampleParam }', $model, ['exampleParam' => 'IM DIFFERENT']],
+
+            // Test basic arrays
+            ['foo=bar', 'foo={foo}', ['foo' => 'bar']],
         ];
     }
 
@@ -537,14 +535,9 @@ class ViewTest extends TestCase
     {
         return [
             ['', ''],
-            ['<input type="text" name="test">', '<input type="text" name="test">'],
-            ['namespace-<input type="text" name="test">', '<input type="text" name="test">', 'namespace'],
-            ['!@#$%^&*()_+{}:"<>?-<input type="text" name="test">', '<input type="text" name="test">', '!@#$%^&*()_+{}:"<>?'],
-            ['namespace-<input type="text" for="test3" id="test2"  name="test">', '<input type="text" for="test3" id="test2"  name="test">', 'namespace'],
-            ['namespace-<input im-not-html-tho="test2">', '<input im-not-html-tho="test2">', 'namespace'],
-            ['namespace-<input type="text" value="im the input" name="test">', '<input type="text" value="im the input" name="test">', 'namespace'],
-            ['namespace-<textarea id="test">Im the content</textarea>', '<textarea id="test">Im the content</textarea>', 'namespace'],
-            ['namespace-<not-html id="test"></not-html>', '<not-html id="test"></not-html>', 'namespace'],
+            ['foo-bar', 'bar', 'foo'],
+            ['foo-bar-baz', 'bar[baz]', 'foo'],
+            ['foo-bar-baz', 'baz', 'foo[bar]'],
         ];
     }
 
@@ -560,9 +553,6 @@ class ViewTest extends TestCase
         ];
     }
 
-    // Protected Methods
-    // =========================================================================
-
     /**
      * @inheritdoc
      */
@@ -575,9 +565,6 @@ class ViewTest extends TestCase
         // By default we want to be in site mode.
         $this->view->setTemplateMode(View::TEMPLATE_MODE_SITE);
     }
-
-    // Private Methods
-    // =========================================================================
 
     /**
      * @param $category

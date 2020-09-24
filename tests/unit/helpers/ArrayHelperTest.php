@@ -21,19 +21,10 @@ use UnitTester;
  */
 class ArrayHelperTest extends Unit
 {
-    // Public Properties
-    // =========================================================================
-
     /**
      * @var UnitTester
      */
     protected $tester;
-
-    // Public Methods
-    // =========================================================================
-
-    // Tests
-    // =========================================================================
 
     /**
      * @dataProvider toArrayDataProvider
@@ -250,6 +241,42 @@ class ArrayHelperTest extends Unit
     }
 
     /**
+     * Test `whereIn()`
+     */
+    public function testWhereIn()
+    {
+        $array = [
+            'foo' => [
+                'type' => 'apple',
+                'num' => '1',
+            ],
+            'bar' => [
+                'type' => 'banana',
+                'num' => '2',
+            ],
+            'baz' => [
+                'type' => 'orange',
+                'num' => '3',
+            ],
+        ];
+
+        $filtered = ArrayHelper::whereIn($array, 'type', ['apple', 'banana', 'pickle']);
+        $this->assertCount(2, $filtered);
+        $this->assertSame(['foo', 'bar'], array_keys($filtered));
+
+        $filtered = ArrayHelper::whereIn($array, 'num', [1, 2, 3], true);
+        $this->assertEmpty($filtered);
+
+        $filtered = ArrayHelper::whereIn($array, 'num', [1, 2]);
+        $this->assertCount(2, $filtered);
+        $this->assertSame(['foo', 'bar'], array_keys($filtered));
+
+        $filtered = ArrayHelper::whereIn($array, 'num', [1, 2], false, false);
+        $this->assertCount(2, $filtered);
+        $this->assertSame([0, 1], array_keys($filtered));
+    }
+
+    /**
      * Test `whereMultiple` func
      */
     public function testWhereMultiple()
@@ -338,9 +365,6 @@ class ArrayHelperTest extends Unit
         $this->assertCount(1, $filtered);
         $this->assertSame('array 3', $filtered[2]['name']);
     }
-
-    // Data Providers
-    // =========================================================================
 
     /**
      * @return array

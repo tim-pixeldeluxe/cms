@@ -11,6 +11,8 @@ use Craft;
 use craft\console\Controller;
 use craft\db\Table;
 use craft\helpers\Console;
+use craft\helpers\Db;
+use craft\helpers\ProjectConfig;
 use craft\services\Plugins;
 use yii\console\ExitCode;
 
@@ -23,22 +25,70 @@ use yii\console\ExitCode;
 class ProjectConfigController extends Controller
 {
     /**
-     * @var bool Whether every entry change should be force-synced.
+     * @var bool Whether every entry change should be force-applied.
      */
     public $force = false;
 
     /**
-     * Syncs the project config.
+     * @inheritdoc
+     */
+    public function options($actionID)
+    {
+        $options = parent::options($actionID);
+
+        if (in_array($actionID, ['apply', 'sync'], true)) {
+            $options[] = 'force';
+        }
+
+        return $options;
+    }
+
+    /**
+     * See a diff of the pending project config YAML changes.
+     *
+     * @return int
+     * @since 3.5.6
+     */
+    public function actionDiff(): int
+    {
+        $diff = ProjectConfig::diff();
+
+        if ($diff === '') {
+            $this->stdout('No pending project config YAML changes.' . PHP_EOL, Console::FG_GREEN);
+            return ExitCode::OK;
+        }
+
+        if (!$this->isColorEnabled()) {
+            $this->stdout($diff . PHP_EOL . PHP_EOL);
+            return ExitCode::OK;
+        }
+
+        foreach (explode("\n", $diff) as $line) {
+            $firstChar = $line[0] ?? '';
+            switch ($firstChar) {
+                case '-':
+                    $this->stdout($line . PHP_EOL, Console::FG_RED);
+                    break;
+                case '+':
+                    $this->stdout($line . PHP_EOL, Console::FG_GREEN);
+                    break;
+                default:
+                    $this->stdout($line . PHP_EOL);
+                    break;
+            }
+        }
+
+        $this->stdout(PHP_EOL);
+        return ExitCode::OK;
+    }
+
+    /**
+     * Applies project config file changes.
      *
      * @return int
      */
-    public function actionSync(): int
+    public function actionApply(): int
     {
-        if (!Craft::$app->getConfig()->getGeneral()->useProjectConfigFile) {
-            $this->stdout('Craft is not configured to use project.yaml. Please enable the \'useProjectConfigFile\' config setting in config/general.php.' . PHP_EOL, Console::FG_YELLOW);
-            return ExitCode::UNSPECIFIED_ERROR;
-        }
-
         $updatesService = Craft::$app->getUpdates();
 
         if ($updatesService->getIsCraftDbMigrationNeeded() || $updatesService->getIsPluginDbUpdateNeeded()) {
@@ -50,7 +100,7 @@ class ProjectConfigController extends Controller
 
         $issues = [];
         if (!$projectConfig->getAreConfigSchemaVersionsCompatible($issues)) {
-            $this->stderr('Your `project.yaml` file was created for different versions of Craft and/or plugins than what’s currently installed.' . PHP_EOL . PHP_EOL, Console::FG_YELLOW);
+            $this->stderr("Your project config files were created for different versions of Craft and/or plugins than what’s currently installed." . PHP_EOL . PHP_EOL, Console::FG_YELLOW);
 
             foreach ($issues as $issue) {
                 $this->stderr($issue['cause'], Console::FG_RED);
@@ -67,7 +117,7 @@ class ProjectConfigController extends Controller
 
         // Do we need to create a new config file?
         if (!file_exists(Craft::$app->getPath()->getProjectConfigFilePath())) {
-            $this->stdout('No project.yaml file found. Generating one from internal config ... ', Console::FG_YELLOW);
+            $this->stdout("No project config files found. Generating them from internal config ... ", Console::FG_YELLOW);
             $projectConfig->regenerateYamlFromConfig();
         } else {
             // Any plugins need to be installed/uninstalled?
@@ -76,11 +126,11 @@ class ProjectConfigController extends Controller
             $this->_uninstallPlugins(array_diff($loadedConfigPlugins, $yamlPlugins));
 
             if (!$this->_installPlugins(array_diff($yamlPlugins, $loadedConfigPlugins))) {
-                $this->stdout('Aborting config sync' . PHP_EOL, Console::FG_RED);
+                $this->stdout('Aborting config apply process' . PHP_EOL, Console::FG_RED);
                 return ExitCode::UNSPECIFIED_ERROR;
             }
 
-            $this->stdout('Applying changes from project.yaml ... ', Console::FG_YELLOW);
+            $this->stdout("Applying changes from your project config files ... ", Console::FG_YELLOW);
             try {
                 $forceUpdate = $projectConfig->forceUpdate;
                 $projectConfig->forceUpdate = $this->force;
@@ -98,6 +148,18 @@ class ProjectConfigController extends Controller
     }
 
     /**
+     * Alias for `apply`.
+     *
+     * @return int
+     * @deprecated in 3.5.0. Use [[actionApply()]] instead.
+     */
+    public function actionSync(): int
+    {
+        $this->stderr('project-config/sync has been renamed to project-config/apply. Running that instead...' . PHP_EOL, Console::FG_RED);
+        return $this->runAction('apply');
+    }
+
+    /**
      * Rebuilds the project config.
      *
      * @return int
@@ -106,6 +168,12 @@ class ProjectConfigController extends Controller
     public function actionRebuild(): int
     {
         $projectConfig = Craft::$app->getProjectConfig();
+
+        if (!file_exists(Craft::$app->getPath()->getProjectConfigFilePath())) {
+            $this->stdout("No project config files found. Generating them from internal config ... ", Console::FG_YELLOW);
+            $projectConfig->regenerateYamlFromConfig();
+        }
+
         $this->stdout('Rebuilding the project config from the current state ... ', Console::FG_YELLOW);
 
         try {
@@ -146,9 +214,9 @@ class ProjectConfigController extends Controller
                 Craft::$app->getErrorHandler()->logException($e);
 
                 // Just remove the row
-                Craft::$app->getDb()->createCommand()
-                    ->delete(Table::PLUGINS, ['handle' => $handle])
-                    ->execute();
+                Db::delete(Table::PLUGINS, [
+                    'handle' => $handle,
+                ]);
             }
         }
     }
@@ -183,19 +251,5 @@ class ProjectConfigController extends Controller
         }
 
         return true;
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function options($actionID)
-    {
-        $options = parent::options($actionID);
-
-        if ($actionID == 'sync') {
-            $options[] = 'force';
-        }
-
-        return $options;
     }
 }

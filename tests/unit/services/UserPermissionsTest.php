@@ -31,9 +31,6 @@ use yii\db\Exception as YiiDbException;
  */
 class UserPermissionsTest extends TestCase
 {
-    // Public Properties
-    // =========================================================================
-
     /**
      * @var UnitTester
      */
@@ -49,10 +46,7 @@ class UserPermissionsTest extends TestCase
      */
     protected $activeUser;
 
-    // Public Methods
-    // =========================================================================
-
-    public function _fixtures() : array
+    public function _fixtures(): array
     {
         return [
             'user-groups' => [
@@ -75,9 +69,6 @@ class UserPermissionsTest extends TestCase
             ]
         ];
     }
-
-    // Tests
-    // =========================================================================
 
     /**
      *
@@ -134,9 +125,9 @@ class UserPermissionsTest extends TestCase
     }
 
     /**
-     * @todo Tests for _filterOrphanedPermissions - use codecov.io for this.
      * @throws YiiDbException
      * @throws WrongEditionException
+     * @todo Tests for _filterOrphanedPermissions - use codecov.io for this.
      */
     public function testDoesUserHavePermission()
     {
@@ -216,9 +207,6 @@ class UserPermissionsTest extends TestCase
         $this->assertFalse($this->userPermissions->doesUserHavePermission($user->id, 'utility:updates'));
     }
 
-
-    // Protected Methods
-    // =========================================================================
 
     /**
      * @inheritdoc

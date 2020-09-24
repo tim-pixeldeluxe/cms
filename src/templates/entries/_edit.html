@@ -6,6 +6,7 @@
 {% set isRevision = entry.getIsRevision() %}
 
 {% set element = entry %}
+{% set hasRevisions = section.enableVersioning %}
 {% set redirectUrl = 'entries/' ~ (isSingle ? 'singles' : section.handle) %}
 {% set saveSourceAction = 'entries/save-entry' %}
 {% set duplicateSourceAction = 'entries/duplicate-entry' %}
@@ -39,18 +40,8 @@
 
 
 {% block content %}
-    {% if not isRevision %}
-        {{ hiddenInput('sectionId', section.id) }}
-        {{ hiddenInput('entryId', entry.sourceId) }}
-    {% else %}
-        {{ hiddenInput('revisionId', entry.revisionId) }}
-    {% endif %}
-
-    <div id="fields">
-        {% include "entries/_fields" with {
-            static: isRevision
-        } %}
-    </div>
+    {{ hiddenInput('sectionId', section.id) }}
+    {{ parent() }}
 
     {# Give plugins a chance to add other things here #}
     {% hook "cp.entries.edit.content" %}
@@ -60,6 +51,7 @@
     {% if not isSingle %}
         {% if showEntryTypes %}
             {{ forms.selectField({
+                status: entry.getAttributeStatus('typeId'),
                 label: "Entry Type"|t('app'),
                 id: 'entryType',
                 name: 'typeId',
@@ -70,6 +62,7 @@
     {% endif %}
 
         {{ forms.textField({
+            status: entry.getAttributeStatus('slug'),
             label: "Slug"|t('app'),
             siteId: entry.siteId,
             translationDescription: 'This field is translated for each site.'|t('app'),
@@ -101,6 +94,7 @@
 
         {% if CraftEdition == CraftPro and currentUser.can('editPeerEntries'~permissionSuffix) %}
             {{ forms.elementSelectField({
+                status: entry.getAttributeStatus('authorId'),
                 label: "Author"|t('app'),
                 id: 'author',
                 name: 'author',
@@ -113,6 +107,7 @@
         {% endif %}
 
         {{ forms.dateTimeField({
+            status: entry.getAttributeStatus('postDate'),
             label: "Post Date"|t('app'),
             id: 'postDate',
             name: 'postDate',
@@ -122,6 +117,7 @@
         }) }}
 
         {{ forms.dateTimeField({
+            status: entry.getAttributeStatus('expiryDate'),
             label: "Expiry Date"|t('app'),
             id: 'expiryDate',
             name: 'expiryDate',

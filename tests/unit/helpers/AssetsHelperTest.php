@@ -14,6 +14,7 @@ use craft\helpers\Assets;
 use crafttests\fixtures\AssetsFixture;
 use UnitTester;
 use yii\base\Exception;
+use yii\base\InvalidArgumentException;
 use yii\base\InvalidConfigException;
 
 /**
@@ -25,16 +26,10 @@ use yii\base\InvalidConfigException;
  */
 class AssetsHelperTest extends Unit
 {
-    // Public Properties
-    // =========================================================================
-
     /**
      * @var UnitTester
      */
     protected $tester;
-
-    // Public Methods
-    // =========================================================================
 
     public function _fixtures(): array
     {
@@ -44,9 +39,6 @@ class AssetsHelperTest extends Unit
             ]
         ];
     }
-
-    // Tests
-    // =========================================================================
 
     /**
      * @dataProvider urlGenerationDataProvider
@@ -100,7 +92,7 @@ class AssetsHelperTest extends Unit
     public function testPrepareAssetNameAsciiRemove()
     {
         Craft::$app->getConfig()->getGeneral()->convertFilenamesToAscii = true;
-        $this->assertSame('test.text', Assets::prepareAssetName('tes§t.text'));
+        $this->assertSame('tesSSt.text', Assets::prepareAssetName('tes§t.text'));
     }
 
     /**
@@ -193,8 +185,23 @@ class AssetsHelperTest extends Unit
         $this->assertSame(1, Assets::getMaxUploadSize());
     }
 
-    // Data Providers
-    // =========================================================================
+    /**
+     * @dataProvider parseSrcsetSizeDataProvider
+     *
+     * @param $result
+     * @param $input
+     */
+    public function testParseSrcsetSize($result, $input)
+    {
+        if (is_array($result)) {
+            $parsed = Assets::parseSrcsetSize($input);
+            $this->assertSame($result, $parsed);
+        } else {
+            $this->tester->expectThrowable(InvalidArgumentException::class, function() use ($input) {
+                Assets::parseSrcsetSize($input);
+            });
+        }
+    }
 
     /**
      * @return array
@@ -218,6 +225,9 @@ class AssetsHelperTest extends Unit
             ['te-@st.notaf ile', 'te !@#$%^&*()st.notaf ile', true, false],
             ['', '', false, false],
             ['-.', '', true, false],
+
+            // Make sure the filenames are getting cut down to 255 chars
+            [str_repeat('o', 251) . '.jpg', str_repeat('o', 252) . '.jpg', true, false],
         ];
     }
 
@@ -255,6 +265,21 @@ class AssetsHelperTest extends Unit
         return [
             [['2', '.'], '{folder:2}.'],
             [['2', '.!@#$%^&*()'], '{folder:2}.!@#$%^&*()']
+        ];
+    }
+
+    /**
+     * @return array
+     */
+    public function parseSrcsetSizeDataProvider(): array
+    {
+        return [
+            [[100.0, 'w'], 100],
+            [[100.0, 'w'], '100w'],
+            [[100.0, 'w'], '100W'],
+            [[2.0, 'x'], '2x'],
+            [[2.0, 'x'], '2X'],
+            [false, '2xo'],
         ];
     }
 

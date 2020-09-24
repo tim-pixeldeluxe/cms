@@ -27,9 +27,6 @@ use yii\helpers\FormatConverter;
  */
 class Locale extends BaseObject
 {
-    // Constants
-    // =========================================================================
-
     /**
      * @var int Positive prefix.
      */
@@ -224,9 +221,6 @@ class Locale extends BaseObject
      */
     const FORMAT_JUI = 'jui';
 
-    // Properties
-    // =========================================================================
-
     /**
      * @var array The languages that use RTL orientation.
      */
@@ -246,9 +240,6 @@ class Locale extends BaseObject
      * @var Formatter|null The locale's formatter.
      */
     private $_formatter;
-
-    // Public Methods
-    // =========================================================================
 
     /**
      * Constructor.
@@ -844,7 +835,7 @@ class Locale extends BaseObject
      */
     public function getId(): string
     {
-        Craft::$app->getDeprecator()->log('Locale::getId()', 'Locale::getId() has been deprecated. Use the id property instead.');
+        Craft::$app->getDeprecator()->log('Locale::getId()', '`Locale::getId()` has been deprecated. Use the `id` property instead.');
 
         return $this->id;
     }
@@ -858,7 +849,7 @@ class Locale extends BaseObject
      */
     public function getName(string $targetLocaleId = null)
     {
-        Craft::$app->getDeprecator()->log('Locale::getName()', 'Locale::getName() has been deprecated. Use getDisplayName() instead.');
+        Craft::$app->getDeprecator()->log('Locale::getName()', '`Locale::getName()` has been deprecated. Use `getDisplayName()` instead.');
 
         // In Craft 2, getName() with no $targetLocaleId would default to the active language
         if ($targetLocaleId === null) {
@@ -876,13 +867,10 @@ class Locale extends BaseObject
      */
     public function getNativeName()
     {
-        Craft::$app->getDeprecator()->log('Locale::getNativeName()', 'Locale::getNativeName() has been deprecated. Use getDisplayName() instead.');
+        Craft::$app->getDeprecator()->log('Locale::getNativeName()', '`Locale::getNativeName()` has been deprecated. Use `getDisplayName()` instead.');
 
         return $this->getDisplayName();
     }
-
-    // Private Methods
-    // =========================================================================
 
     /**
      * Returns a localized date/time format.
