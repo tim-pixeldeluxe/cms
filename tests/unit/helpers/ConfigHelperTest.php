@@ -38,7 +38,7 @@ class ConfigHelperTest extends Unit
      */
     public function testSizeInBytes($result, $input)
     {
-        $this->assertSame($result, ConfigHelper::sizeInBytes($input));
+        self::assertSame($result, ConfigHelper::sizeInBytes($input));
     }
 
     /**
@@ -51,8 +51,8 @@ class ConfigHelperTest extends Unit
     public function testDurationInSeconds($result, $input)
     {
         $durationResult = ConfigHelper::durationInSeconds($input);
-        $this->assertSame($result, $durationResult);
-        $this->assertIsInt($durationResult);
+        self::assertSame($result, $durationResult);
+        self::assertIsInt($durationResult);
     }
 
     /**
@@ -65,16 +65,16 @@ class ConfigHelperTest extends Unit
             ConfigHelper::durationInSeconds(true);
         });
 
-        $this->tester->expectThrowable(ErrorException::class, function() {
+        $this->tester->expectThrowable(InvalidConfigException::class, function() {
             ConfigHelper::durationInSeconds(['test' => 'test']);
         });
 
-        $this->tester->expectThrowable(ErrorException::class, function() {
+        $this->tester->expectThrowable(InvalidConfigException::class, function() {
             $dateTime = new DateTime('2018-08-08 20:0:00');
             ConfigHelper::durationInSeconds($dateTime);
         });
 
-        $this->tester->expectThrowable(ErrorException::class, function() {
+        $this->tester->expectThrowable(InvalidConfigException::class, function() {
             $std = new stdClass();
             $std->a = 'a';
             ConfigHelper::durationInSeconds($std);
@@ -90,7 +90,7 @@ class ConfigHelperTest extends Unit
      */
     public function testLocalizedValue($result, $input, $handle = null)
     {
-        $this->assertSame($result, ConfigHelper::localizedValue($input, $handle));
+        self::assertSame($result, ConfigHelper::localizedValue($input, $handle));
     }
 
     /**

@@ -14,6 +14,7 @@ use craft\db\Migration;
 use craft\db\Table;
 use craft\elements\Asset;
 use craft\elements\User;
+use craft\enums\LicenseKeyStatus;
 use craft\errors\InvalidPluginException;
 use craft\helpers\App;
 use craft\helpers\DateTimeHelper;
@@ -459,7 +460,13 @@ class Install extends Migration
             'handle' => $this->string()->notNull(),
             'version' => $this->string()->notNull(),
             'schemaVersion' => $this->string()->notNull(),
-            'licenseKeyStatus' => $this->enum('licenseKeyStatus', ['valid', 'invalid', 'mismatched', 'astray', 'unknown'])->notNull()->defaultValue('unknown'),
+            'licenseKeyStatus' => $this->enum('licenseKeyStatus', [
+                LicenseKeyStatus::Valid,
+                LicenseKeyStatus::Invalid,
+                LicenseKeyStatus::Mismatched,
+                LicenseKeyStatus::Astray,
+                LicenseKeyStatus::Unknown,
+            ])->notNull()->defaultValue(LicenseKeyStatus::Unknown),
             'licensedEdition' => $this->string(),
             'installDate' => $this->dateTime()->notNull(),
             'dateCreated' => $this->dateTime()->notNull(),
@@ -1046,10 +1053,7 @@ class Install extends Migration
 
         $applyExistingProjectConfig = false;
 
-        if (
-            $this->applyProjectConfigYaml &&
-            file_exists($configFile = Craft::$app->getPath()->getProjectConfigFilePath())
-        ) {
+        if ($this->applyProjectConfigYaml && $projectConfig->getDoesYamlExist()) {
             try {
                 $expectedSchemaVersion = (string)$projectConfig->get(ProjectConfig::CONFIG_SCHEMA_VERSION_KEY, true);
                 $craftSchemaVersion = (string)Craft::$app->schemaVersion;
@@ -1060,7 +1064,7 @@ class Install extends Migration
                 }
 
                 // Make sure at least sites are processed
-                ProjectConfigHelper::ensureAllSitesProcessed();
+                ProjectConfigHelper::ensureAllSitesProcessed(true);
 
                 $this->_installPlugins();
                 $applyExistingProjectConfig = true;
@@ -1068,10 +1072,11 @@ class Install extends Migration
                 echo "    > can't apply existing project config: {$e->getMessage()}\n";
                 Craft::$app->getErrorHandler()->logException($e);
 
-                // Rename project.yaml so we can create a new one
-                $backupFile = pathinfo(ProjectConfig::CONFIG_FILENAME, PATHINFO_FILENAME) . date('-Y-m-d-His') . '.yaml';
-                echo "    > renaming project.yaml to $backupFile and moving to config backup folder ... ";
-                rename($configFile, Craft::$app->getPath()->getConfigBackupPath() . '/' . $backupFile);
+                // Rename config/project/ so we can create a new one
+                $backupName = "project-" . date('Y-m-d-His');
+                echo "    > moving config/project/ to storage/config-backups/$backupName ... ";
+                $pathService = Craft::$app->getPath();
+                rename($pathService->getProjectConfigPath(), $pathService->getConfigBackupPath() . DIRECTORY_SEPARATOR . $backupName);
                 echo "done\n";
 
                 // Forget everything we knew about the old config

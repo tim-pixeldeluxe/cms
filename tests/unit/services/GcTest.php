@@ -32,8 +32,6 @@ use yii\base\InvalidArgumentException;
 /**
  * Unit tests for the garbage collector service.
  *
- * @todo Test search index removal
- *
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @author Global Network Group | Giel Tettelaar <giel@yellowflash.net>
  * @since 3.2
@@ -132,8 +130,8 @@ class GcTest extends Unit
             ->where(['id' => $ids])
             ->all();
 
-        $this->assertCount($remainingCount, $items);
-        $this->assertSame((string)ArrayHelper::firstValue($items)['id'], $leftoverId);
+        self::assertCount($remainingCount, $items);
+        self::assertSame((string)ArrayHelper::firstValue($items)['id'], $leftoverId);
     }
 
     /**
@@ -150,9 +148,9 @@ class GcTest extends Unit
             ->count();
 
         // Make sure all 4 users are in there
-        $this->assertEquals(4, $count);
+        self::assertEquals(4, $count);
 
-        // Create then with 3 days
+        // Create them with 3 days
         $this->_createExpiringPendingUsers();
 
         $this->gc->run(true);
@@ -163,7 +161,7 @@ class GcTest extends Unit
             ->count();
 
         // Should only be 2 users now
-        $this->assertEquals(2, $count);
+        self::assertEquals(2, $count);
     }
 
     /**
@@ -207,13 +205,13 @@ class GcTest extends Unit
             ->asArray()
             ->all();
 
-        $this->assertCount($totalEntries - $expectedRemoval, $entries);
+        self::assertCount($totalEntries - $expectedRemoval, $entries);
 
         // Check any non allowed titles. Fail if an entry exists with a title that isn't allowed.
         foreach ($notAllowedTitles as $notAllowedTitle) {
             $doesEntryExistWithThisTitle = ArrayHelper::where($entries, 'title', $notAllowedTitle);
             if ($doesEntryExistWithThisTitle) {
-                $this->fail("Entries were deleted but an entry with title ($notAllowedTitle) still exists");
+                self::fail("Entries were deleted but an entry with title ($notAllowedTitle) still exists");
             }
         }
     }

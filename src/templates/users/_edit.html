@@ -89,7 +89,10 @@
                     value: user.email,
                     required: true,
                     type: 'email',
-                    errors: user.getErrors('email')|merge(user.getErrors('unverifiedEmail'))
+                    errors: user.getErrors('email')|merge(user.getErrors('unverifiedEmail')),
+                    inputAttributes: {
+                        data: {lpignore: 'true'},
+                    },
                 }) }}
 
                 {{ forms.checkboxField({
@@ -110,7 +113,10 @@
                     value: user.email,
                     required: true,
                     type: 'email',
-                    errors: user.getErrors('email')|merge(user.getErrors('unverifiedEmail'))
+                    errors: user.getErrors('email')|merge(user.getErrors('unverifiedEmail')),
+                    inputAttributes: {
+                        data: {lpignore: 'true'},
+                    },
                 }) }}
 
                 {% if user.getIsCurrent() %}
@@ -119,7 +125,12 @@
                         id: 'newPassword',
                         name: 'newPassword',
                         autocomplete: 'new-password',
-                        errors: user.getErrors('newPassword')
+                        errors: user.getErrors('newPassword'),
+                        inputAttributes: {
+                            data: {
+                                lpignore: user.getIsCurrent() ? false : 'true',
+                            }|filter,
+                        },
                     }) }}
 
                     {% js %}
@@ -318,7 +329,7 @@
 
                         {% if actions|length %}
                             <div>
-                                <button type="button" id="action-menubtn" class="btn menubtn" data-icon="settings" title="{{ 'Actions'|t('app') }}"></button>
+                                <button type="button" id="action-menubtn" class="btn menubtn" data-icon="settings" title="{{ 'Actions'|t('app') }}" aria-label="{{ 'Actions'|t('app') }}"></button>
                                 <div class="menu">
                                     {% for actionList in actions %}
                                         {% if not loop.first %}<hr>{% endif %}

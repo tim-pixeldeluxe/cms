@@ -8,6 +8,7 @@
 namespace craft\helpers;
 
 use Craft;
+use Normalizer;
 use Stringy\Stringy as BaseStringy;
 use voku\helper\ASCII;
 use yii\base\Exception;
@@ -1573,6 +1574,11 @@ class StringHelper extends \yii\helpers\StringHelper
      */
     public static function toAscii(string $str, string $language = null): string
     {
+        // If Intl is installed, normalize NFD chars to NFC
+        if (class_exists(Normalizer::class)) {
+            $str = Normalizer::normalize($str, Normalizer::FORM_C);
+        }
+
         return (string)BaseStringy::create($str)->toAscii($language ?? Craft::$app->language);
     }
 
@@ -1885,5 +1891,33 @@ class StringHelper extends \yii\helpers\StringHelper
             // 48 bits for "node"
             random_int(0, 0xffff), random_int(0, 0xffff), random_int(0, 0xffff)
         );
+    }
+
+    /**
+     * Converts an email from IDNA ASCII to Unicode, if the Intl extension is installed.
+     *
+     * @param string $email
+     * @return string
+     * @since 3.5.16
+     */
+    public static function idnToUtf8Email(string $email): string
+    {
+        if (!function_exists('idn_to_utf8') || !defined('INTL_IDNA_VARIANT_UTS46')) {
+            return $email;
+        }
+        $parts = explode('@', $email, 2);
+        foreach ($parts as &$part) {
+            if (($part = idn_to_utf8($part, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46)) === false) {
+                return $email;
+            }
+        }
+        $combined = implode('@', $parts);
+
+        // Return the original string if nothing changed besides casing
+        if (strcasecmp($combined, $email) === 0) {
+            return $email;
+        }
+
+        return $combined;
     }
 }

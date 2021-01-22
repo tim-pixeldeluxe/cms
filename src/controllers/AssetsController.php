@@ -290,16 +290,16 @@ class AssetsController extends Controller
     public function actionUpload(): Response
     {
         $uploadedFile = UploadedFile::getInstanceByName('assets-upload');
-        $folderId = $this->request->getBodyParam('folderId');
-        $fieldId = $this->request->getBodyParam('fieldId');
-        $elementId = $this->request->getBodyParam('elementId');
 
-        if (empty($folderId) && (empty($fieldId) || empty($elementId))) {
-            throw new BadRequestHttpException('No target destination provided for uploading');
+        if (!$uploadedFile) {
+            throw new BadRequestHttpException('No file was uploaded');
         }
 
-        if ($uploadedFile === null) {
-            throw new BadRequestHttpException('No file was uploaded');
+        $folderId = $this->request->getBodyParam('folderId');
+        $fieldId = $this->request->getBodyParam('fieldId');
+
+        if (!$folderId && !$fieldId) {
+            throw new BadRequestHttpException('No target destination provided for uploading');
         }
 
         try {
@@ -314,7 +314,12 @@ class AssetsController extends Controller
                     throw new BadRequestHttpException('The field provided is not an Assets field');
                 }
 
-                $element = $elementId ? Craft::$app->getElements()->getElementById((int)$elementId) : null;
+                if ($elementId = $this->request->getBodyParam('elementId')) {
+                    $siteId = $this->request->getBodyParam('siteId') ?: null;
+                    $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
+                } else {
+                    $element = null;
+                }
                 $folderId = $field->resolveDynamicPathToFolderId($element);
             }
 
@@ -950,9 +955,15 @@ class AssetsController extends Controller
                 }
             }
 
+            $generalConfig = Craft::$app->getConfig()->getGeneral();
+            $upscale = $generalConfig->upscaleImages;
+            $generalConfig->upscaleImages = true;
+
             if ($zoom !== 1.0) {
                 $image->scaleToFit($originalImageWidth * $zoom, $originalImageHeight * $zoom);
             }
+
+            $generalConfig->upscaleImages = $upscale;
 
             if ($imageRotated) {
                 $image->rotate($imageRotation + $viewportRotation);
@@ -1054,9 +1065,9 @@ class AssetsController extends Controller
         if (count($assets) === 1) {
             $asset = reset($assets);
             return $this->response
-                ->sendStreamAsFile($asset->stream, $asset->filename, [
+                ->sendStreamAsFile($asset->getStream(), $asset->filename, [
                     'fileSize' => $asset->size,
-                    'mimeType' => $asset->mimeType,
+                    'mimeType' => $asset->getMimeType(),
                 ]);
         }
 
@@ -1069,10 +1080,10 @@ class AssetsController extends Controller
         }
 
         App::maxPowerCaptain();
+
         foreach ($assets as $asset) {
-            $localPath = $asset->getCopyOfFile();
-            $volume = $asset->getVolume();
-            $zip->addFile($localPath, $volume->name . '/' . $asset->getPath());
+            $path = $asset->getVolume()->name . '/' . $asset->getPath();
+            $zip->addFromString($path, $asset->getContents());
         }
 
         $zip->close();

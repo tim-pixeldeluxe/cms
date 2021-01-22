@@ -251,6 +251,7 @@ class Raster extends Image
     {
         $this->normalizeDimensions($targetWidth, $targetHeight);
 
+        // If upscaling is fine OR we have to downscale.
         if ($scaleIfSmaller || ($this->getWidth() > $targetWidth && $this->getHeight() > $targetHeight)) {
             // Scale first.
             $factor = min($this->getWidth() / $targetWidth, $this->getHeight() / $targetHeight);
@@ -258,6 +259,7 @@ class Raster extends Image
             $newWidth = round($this->getWidth() / $factor);
 
             $this->resize($newWidth, $newHeight);
+        // If we need to upscale AND that's ok
         } else if (($targetWidth > $this->getWidth() || $targetHeight > $this->getHeight()) && !$scaleIfSmaller) {
             // Figure the crop size reductions
             $factor = max($targetWidth / $this->getWidth(), $targetHeight / $this->getHeight());
@@ -693,7 +695,7 @@ class Raster extends Image
     {
         // Because it's possible for someone to set the quality to 0.
         $quality = $quality ?: $this->_quality;
-        $extension = (!$extension ? $this->getExtension() : $extension);
+        $extension = (!$extension ? mb_strtolower($this->getExtension()) : $extension);
 
         switch ($extension) {
             case 'jpeg':

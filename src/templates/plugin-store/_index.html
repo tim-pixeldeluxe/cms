@@ -119,6 +119,8 @@
     "Critical",
     "Couldn’t add all items to the cart.",
     "No results.",
+    "This license is tied to another Craft install. Visit {accountLink} to detach it, or buy a new license.",
+
 ]) %}
 
 {% block actionButton %}
@@ -146,7 +148,7 @@
         <form id="craftid-connect-form" method="post">
             {{ csrfInput() }}
             {{ actionInput('plugin-store/connect') }}
-            <div class="ssl-status light" title="{{ craft.app.request.isSecureConnection ? "Your connection is secure"|t('app') : "Your connection is insecure"|t('app') }}">
+            <div class="ssl-status light" title="{{ craft.app.request.isSecureConnection ? "Your connection is secure"|t('app') : "Your connection is insecure"|t('app') }}" aria-label="{{ craft.app.request.isSecureConnection ? "Your connection is secure"|t('app') : "Your connection is insecure"|t('app') }}">
                 <i class="{{ craft.app.request.isSecureConnection ? "secure" : "insecure" }} icon"></i>
             </div>
             <a onclick="document.getElementById('craftid-connect-form').submit();">{{ 'Sign into Craft ID'|t('app') }}</a>

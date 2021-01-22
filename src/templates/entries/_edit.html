@@ -30,8 +30,8 @@
     {% if section.type == 'structure' %}
         {% set nextEntryParams = nextEntryParams|merge(['parentId={parent.id}']) %}
     {% endif %}
-    {% set canDuplicateSource = true %}
-    {% set canAddAnother = true %}
+    {% set canDuplicateSource = currentUser.can("createEntries#{permissionSuffix}") %}
+    {% set canAddAnother = currentUser.can("createEntries#{permissionSuffix}") %}
     {% set addAnotherRedirectUrl = "entries/#{section.handle}/new?" ~ nextEntryParams|join('&') %}
 {% endif %}
 
@@ -48,33 +48,32 @@
 {% endblock %}
 
 {% block settings %}
-    {% if not isSingle %}
-        {% if showEntryTypes %}
-            {{ forms.selectField({
-                status: entry.getAttributeStatus('typeId'),
-                label: "Entry Type"|t('app'),
-                id: 'entryType',
-                name: 'typeId',
-                value: entryType.id,
-                options: entryTypeOptions
-            }) }}
-        {% endif %}
+    {% if not isSingle and showEntryTypes %}
+        {{ forms.selectField({
+            status: entry.getAttributeStatus('typeId'),
+            label: "Entry Type"|t('app'),
+            id: 'entryType',
+            name: 'typeId',
+            value: entryType.id,
+            options: entryTypeOptions,
+            errors: entry.getErrors('typeId'),
+        }) }}
     {% endif %}
 
-        {{ forms.textField({
-            status: entry.getAttributeStatus('slug'),
-            label: "Slug"|t('app'),
-            siteId: entry.siteId,
-            translationDescription: 'This field is translated for each site.'|t('app'),
-            id: 'slug',
-            name: 'slug',
-            autocorrect: false,
-            autocapitalize: false,
-            value: '__temp_' in entry.slug ? '' : entry.slug,
-            placeholder: "Enter slug"|t('app'),
-            errors: (not isRevision ? entry.getErrors('slug')|merge(entry.getErrors('uri'))),
-            disabled: isRevision
-        }) }}
+    {{ forms.textField({
+        status: entry.getAttributeStatus('slug'),
+        label: "Slug"|t('app'),
+        siteId: entry.siteId,
+        translationDescription: 'This field is translated for each site.'|t('app'),
+        id: 'slug',
+        name: 'slug',
+        autocorrect: false,
+        autocapitalize: false,
+        value: '__temp_' in entry.slug ? '' : entry.slug,
+        placeholder: "Enter slug"|t('app'),
+        errors: (not isRevision ? entry.getErrors('slug')|merge(entry.getErrors('uri'))),
+        disabled: isRevision
+    }) }}
 
     {% if not isSingle %}
         {% if parentOptionCriteria is defined %}

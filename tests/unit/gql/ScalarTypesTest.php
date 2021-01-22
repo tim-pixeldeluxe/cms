@@ -10,6 +10,7 @@ namespace craftunit\gql;
 use Codeception\Test\Unit;
 use craft\errors\GqlException;
 use craft\gql\directives\FormatDateTime;
+use craft\gql\GqlEntityRegistry;
 use craft\gql\types\DateTime;
 use craft\gql\types\Number;
 use craft\gql\types\QueryArgument;
@@ -30,17 +31,28 @@ class ScalarTypesTest extends Unit
     /**
      * Test the serialization of scalar data types
      *
-     *@dataProvider seializationDataProvider
+     * @dataProvider serializationDataProvider
+     *
+     * @param ScalarType $type
+     * @param $testValue
+     * @param $match
+     * @throws \GraphQL\Error\Error
      */
     public function testSerialization(ScalarType $type, $testValue, $match)
     {
-        $this->assertSame($match, $type->serialize($testValue));
+        self::assertSame($match, $type->serialize($testValue));
     }
 
     /**
      * Test parsing a value provided as a query variable
      *
      * @dataProvider parsingValueDataProvider
+     *
+     * @param ScalarType $type
+     * @param $testValue
+     * @param $match
+     * @param $exceptionThrown
+     * @throws \GraphQL\Error\Error
      */
     public function testParsingValue(ScalarType $type, $testValue, $match, $exceptionThrown)
     {
@@ -48,7 +60,7 @@ class ScalarTypesTest extends Unit
             $this->expectException($exceptionThrown);
             $type->parseValue($testValue);
         } else {
-            $this->assertSame($match, $type->parseValue($testValue));
+            self::assertSame($match, $type->parseValue($testValue));
         }
     }
 
@@ -56,6 +68,12 @@ class ScalarTypesTest extends Unit
      * Test parsing a value provided as a query variable
      *
      * @dataProvider parsingLiteralDataProvider
+     *
+     * @param ScalarType $type
+     * @param $testValue
+     * @param $match
+     * @param $exceptionThrown
+     * @throws \Exception
      */
     public function testParsingLiteral(ScalarType $type, $testValue, $match, $exceptionThrown)
     {
@@ -63,13 +81,18 @@ class ScalarTypesTest extends Unit
             $this->expectException($exceptionThrown);
             $type->parseLiteral($testValue);
         } else {
-            $this->assertSame($match, $type->parseLiteral($testValue));
+            self::assertSame($match, $type->parseLiteral($testValue));
         }
     }
 
-    public function seializationDataProvider()
+    /**
+     * @return array[]
+     */
+    public function serializationDataProvider()
     {
         $now = new \DateTime();
+
+        GqlEntityRegistry::setPrefix('');
 
         return [
             [DateTime::getType(), 'testString', 'testString'],
@@ -93,8 +116,13 @@ class ScalarTypesTest extends Unit
         ];
     }
 
+    /**
+     * @return array[]
+     */
     public function parsingValueDataProvider()
     {
+        GqlEntityRegistry::setPrefix('');
+
         return [
             [DateTime::getType(), $time = time(), (string)$time, false],
 
@@ -111,8 +139,13 @@ class ScalarTypesTest extends Unit
         ];
     }
 
+    /**
+     * @return array[]
+     */
     public function parsingLiteralDataProvider()
     {
+        GqlEntityRegistry::setPrefix('');
+
         return [
             [DateTime::getType(), new StringValueNode(['value' => $time = time()]), (string)$time, false],
             [DateTime::getType(), new IntValueNode(['value' => 2]), null, GqlException::class],

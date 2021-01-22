@@ -9,6 +9,7 @@
     value: value,
     toggle: true,
     targetPrefix: ".#{targetPrefix}",
+    tip: value == 'showTime' ? 'Time fields are better suited for managing Time-only values.'|t('app'),
 }) }}
 
 {{ forms.selectField({
@@ -18,6 +19,7 @@
         value == 'showDate' ? 'hidden',
     ]|filter,
     label: "Minute Increment"|t('app'),
+    instructions: 'The number of minutes that timepicker options should be incremented by. (Authors can enter a specific time manually.)'|t('app'),
     id: 'minuteIncrement',
     name: 'minuteIncrement',
     options: incrementOptions,
@@ -34,6 +36,7 @@
     id: 'min',
     name: 'min',
     value: field.min,
+    errors: field.getErrors('min'),
 }) }}
 
 {{ forms.dateField({
@@ -46,4 +49,5 @@
     id: 'max',
     name: 'max',
     value: field.max,
+    errors: field.getErrors('max'),
 }) }}
