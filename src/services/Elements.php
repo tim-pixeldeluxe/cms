@@ -38,6 +38,7 @@ use craft\events\ElementEvent;
 use craft\events\ElementQueryEvent;
 use craft\events\MergeElementsEvent;
 use craft\events\RegisterComponentTypesEvent;
+use craft\events\ElementPropagateEvent;
 use craft\helpers\ArrayHelper;
 use craft\helpers\Component as ComponentHelper;
 use craft\helpers\DateTimeHelper;
@@ -203,6 +204,11 @@ class Elements extends Component
      * @event BatchElementActionEvent The event that is triggered before an element is propagated.
      */
     const EVENT_BEFORE_PROPAGATE_ELEMENT = 'beforePropagateElement';
+
+    /**
+     * @event ElementEvent The event that is triggered when an element is propagated.
+     */
+    const EVENT_PROPAGATE_ELEMENT = 'propagateElement';
 
     /**
      * @event BatchElementActionEvent The event that is triggered after an element is propagated.
@@ -2508,6 +2514,18 @@ class Elements extends Component
      */
     private function _propagateElement(ElementInterface $element, array $siteInfo, $siteElement = null)
     {
+        $event = new ElementPropagateEvent([ 'element' => $element, ]);
+
+        // Fire a 'propagateElements' event
+        if ($this->hasEventHandlers(self::EVENT_PROPAGATE_ELEMENT)) {
+            $this->trigger(self::EVENT_PROPAGATE_ELEMENT, $event);
+        }
+
+        // Do not propagate if event isn't valid
+        if(!$event->isValid) {
+            return;
+        }
+
         // Try to fetch the element in this site
         if ($siteElement === null && $element->id) {
             $siteElement = $this->getElementById($element->id, get_class($element), $siteInfo['siteId']);
