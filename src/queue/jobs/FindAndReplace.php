@@ -59,7 +59,7 @@ class FindAndReplace extends BaseJob
 
         // Now loop through them and perform the find/replace
         $totalTextColumns = count($this->_textColumns);
-        foreach ($this->_textColumns as $i => list($table, $column)) {
+        foreach ($this->_textColumns as $i => [$table, $column]) {
             $this->setProgress($queue, $i / $totalTextColumns);
 
             Db::replace($table, $column, $this->find, $this->replace);
@@ -73,7 +73,7 @@ class FindAndReplace extends BaseJob
     {
         return Craft::t('app', 'Replacing “{find}” with “{replace}”', [
             'find' => $this->find,
-            'replace' => $this->replace
+            'replace' => $this->replace,
         ]);
     }
 
@@ -105,7 +105,7 @@ class FindAndReplace extends BaseJob
             'text',
             'varchar',
             'string',
-            'char'
+            'char',
         ], true)) {
             $this->_textColumns[] = [$table, $fieldColumnPrefix . $field->handle];
         }

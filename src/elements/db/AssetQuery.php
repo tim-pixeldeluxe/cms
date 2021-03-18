@@ -793,9 +793,9 @@ class AssetQuery extends ElementQuery
     /**
      * @inheritdoc
      */
-    public function populate($rows)
+    public function afterPopulate(array $elements): array
     {
-        $elements = parent::populate($rows);
+        $elements = parent::afterPopulate($elements);
 
         // Eager-load transforms?
         if ($this->withTransforms && !$this->asArray) {
@@ -815,6 +815,8 @@ class AssetQuery extends ElementQuery
      */
     protected function beforePrepare(): bool
     {
+        $this->_normalizeVolumeId();
+
         // See if 'volume' was set to an invalid handle
         if ($this->volumeId === []) {
             return false;
@@ -835,14 +837,13 @@ class AssetQuery extends ElementQuery
             'assets.focalPoint',
             'assets.keptFile',
             'assets.dateModified',
-            'volumeFolders.path AS folderPath'
+            'volumeFolders.path AS folderPath',
         ]);
 
         if (self::_supportsUploaderParam()) {
             $this->query->addSelect('assets.uploaderId');
         }
 
-        $this->_normalizeVolumeId();
         if ($this->volumeId) {
             if ($this->volumeId === ':empty:') {
                 $this->subQuery->andWhere(['assets.volumeId' => null]);

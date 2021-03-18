@@ -16,6 +16,7 @@ use craft\helpers\Db;
 use craft\helpers\FileHelper;
 use mikehaertl\shellcommand\Command as ShellCommand;
 use yii\base\ErrorException;
+use yii\base\NotSupportedException;
 use yii\db\Exception;
 
 /**
@@ -65,7 +66,7 @@ class Schema extends \yii\db\mysql\Schema
     public function createQueryBuilder(): QueryBuilder
     {
         return new QueryBuilder($this->db, [
-            'separator' => "\n"
+            'separator' => "\n",
         ]);
     }
 
@@ -234,7 +235,7 @@ class Schema extends \yii\db\mysql\Schema
      *
      * @param string $tableName The name of the table to get the indexes for.
      * @return array All indexes for the given table.
-     * @throws \yii\base\NotSupportedException
+     * @throws NotSupportedException
      */
     public function findIndexes(string $tableName): array
     {
@@ -246,8 +247,8 @@ class Schema extends \yii\db\mysql\Schema
         $regexp = '/(UNIQUE\s+)?KEY\s+([^\(\s]+)\s*\(([^\(\)]+)\)/mi';
         if (preg_match_all($regexp, $sql, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
-                $indexName = str_replace('`', '', $match[2]);
-                $indexColumns = array_map('trim', explode(',', str_replace('`', '', $match[3])));
+                $indexName = str_replace(['`', '"'], '', $match[2]);
+                $indexColumns = array_map('trim', explode(',', str_replace(['`', '"'], '', $match[3])));
                 $indexes[$indexName] = [
                     'columns' => $indexColumns,
                     'unique' => !empty($match[1]),
@@ -344,9 +345,9 @@ SQL;
             $regexp = '/FOREIGN KEY\s+\(([^\)]+)\)\s+REFERENCES\s+([^\(^\s]+)\s*\(([^\)]+)\)(?:\s+ON DELETE (\w+))?(?:\s+ON UPDATE (\w+))?/mi';
             if (preg_match_all($regexp, $sql, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $i => $match) {
-                    $fks = array_map('trim', explode(',', str_replace('`', '', $match[1])));
-                    $pks = array_map('trim', explode(',', str_replace('`', '', $match[3])));
-                    $constraint = [str_replace('`', '', $match[2])];
+                    $fks = array_map('trim', explode(',', str_replace(['`', '"'], '', $match[1])));
+                    $pks = array_map('trim', explode(',', str_replace(['`', '"'], '', $match[3])));
+                    $constraint = [str_replace(['`', '"'], '', $match[2])];
                     foreach ($fks as $k => $name) {
                         $constraint[$name] = $pks[$k];
                     }

@@ -24,6 +24,7 @@ use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use craft\helpers\Html;
 use craft\helpers\Json;
+use craft\helpers\Session;
 use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
 use craft\i18n\Locale;
@@ -141,6 +142,14 @@ class User extends Element implements IdentityInterface
     /**
      * @inheritdoc
      */
+    public static function trackChanges(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @inheritdoc
+     */
     public static function hasContent(): bool
     {
         return true;
@@ -185,8 +194,8 @@ class User extends Element implements IdentityInterface
             [
                 'key' => '*',
                 'label' => Craft::t('app', 'All users'),
-                'hasThumbs' => true
-            ]
+                'hasThumbs' => true,
+            ],
         ];
 
         if (Craft::$app->getEdition() === Craft::Pro) {
@@ -195,7 +204,7 @@ class User extends Element implements IdentityInterface
                 'key' => 'admins',
                 'label' => Craft::t('app', 'Admins'),
                 'criteria' => ['admin' => true],
-                'hasThumbs' => true
+                'hasThumbs' => true,
             ];
 
             $groups = Craft::$app->getUserGroups()->getAllGroups();
@@ -208,7 +217,7 @@ class User extends Element implements IdentityInterface
                         'key' => 'group:' . $group->uid,
                         'label' => Craft::t('site', $group->name),
                         'criteria' => ['groupId' => $group->id],
-                        'hasThumbs' => true
+                        'hasThumbs' => true,
                     ];
                 }
             }
@@ -342,6 +351,7 @@ class User extends Element implements IdentityInterface
             'fullName' => ['label' => Craft::t('app', 'Full Name')],
             'firstName' => ['label' => Craft::t('app', 'First Name')],
             'lastName' => ['label' => Craft::t('app', 'Last Name')],
+            'groups' => ['label' => Craft::t('app', 'Groups')],
             'preferredLanguage' => ['label' => Craft::t('app', 'Preferred Language')],
             'preferredLocale' => ['label' => Craft::t('app', 'Preferred Locale')],
             'id' => ['label' => Craft::t('app', 'ID')],
@@ -368,6 +378,19 @@ class User extends Element implements IdentityInterface
     /**
      * @inheritdoc
      */
+    protected static function prepElementQueryForTableAttribute(ElementQueryInterface $elementQuery, string $attribute)
+    {
+        /** @var UserQuery $elementQuery */
+        if ($attribute === 'groups') {
+            $elementQuery->withGroups();
+        } else {
+            parent::prepElementQueryForTableAttribute($elementQuery, $attribute);
+        }
+    }
+
+    /**
+     * @inheritdoc
+     */
     public static function eagerLoadingMap(array $sourceElements, string $handle)
     {
         if ($handle === 'photo') {
@@ -383,7 +406,7 @@ class User extends Element implements IdentityInterface
 
             return [
                 'elementType' => Asset::class,
-                'map' => $map
+                'map' => $map,
             ];
         }
 
@@ -423,13 +446,13 @@ class User extends Element implements IdentityInterface
         }
 
         // If the current user is being impersonated by an admin, ignore their status
-        if ($previousUserId = Craft::$app->getSession()->get(self::IMPERSONATE_KEY)) {
+        if ($previousUserId = Session::get(self::IMPERSONATE_KEY)) {
             $previousUser = static::find()
                 ->id($previousUserId)
-                ->admin()
+                ->anyStatus()
                 ->one();
 
-            if ($previousUser) {
+            if ($previousUser && $previousUser->can('impersonateUsers')) {
                 return $user;
             }
         }
@@ -740,7 +763,7 @@ class User extends Element implements IdentityInterface
                 if (strpos($this->$attribute, '://') !== false) {
                     $validator->addError($this, $attribute, Craft::t('app', 'Invalid value “{value}”.'));
                 }
-            }
+            },
         ];
 
         return $rules;
@@ -803,7 +826,7 @@ class User extends Element implements IdentityInterface
      */
     public function getAuthKey()
     {
-        $token = Craft::$app->getSession()->get(Craft::$app->getUser()->tokenParam);
+        $token = Session::get(Craft::$app->getUser()->tokenParam);
 
         if ($token === null) {
             throw new Exception('No user session token exists.');
@@ -830,19 +853,31 @@ class User extends Element implements IdentityInterface
             return false;
         }
 
-        list($token, , $userAgent) = $data;
+        [$token, , $userAgent] = $data;
 
         if (!$this->_validateUserAgent($userAgent)) {
             return false;
         }
 
-        return (new Query())
+        $tokenId = (new Query())
+            ->select(['id'])
             ->from([Table::SESSIONS])
             ->where([
                 'token' => $token,
-                'userId' => $this->id
+                'userId' => $this->id,
             ])
-            ->exists();
+            ->scalar();
+
+        if (!$tokenId) {
+            return false;
+        }
+
+        // Update the session row's dateUpdated value so it doesn't get GC'd
+        Db::update(Table::SESSIONS, [
+            'dateUpdated' => Db::prepareDateForDb(new \DateTime()),
+        ], ['id' => $tokenId]);
+
+        return true;
     }
 
     /**
@@ -1037,7 +1072,7 @@ class User extends Element implements IdentityInterface
         if ($photo) {
             return $photo->getUrl([
                 'width' => $size,
-                'height' => $size
+                'height' => $size,
             ]);
         }
 
@@ -1317,6 +1352,11 @@ class User extends Element implements IdentityInterface
             case 'email':
                 return $this->email ? Html::mailto(Html::encode($this->email)) : '';
 
+            case 'groups':
+                return implode(', ', array_map(function(UserGroup $group) {
+                    return Html::encode(Craft::t('site', $group->name));
+                }, $this->getGroups()));
+
             case 'preferredLanguage':
                 $language = $this->getPreferredLanguage();
                 return $language ? (new Locale($language))->getDisplayName(Craft::$app->language) : '';
@@ -1417,12 +1457,17 @@ class User extends Element implements IdentityInterface
             $this->newPassword = null;
         }
 
+        // Capture the dirty attributes from the record
+        $dirtyAttributes = array_keys($record->getDirtyAttributes());
+
         $record->save(false);
 
         // Make sure that the photo is located in the right place
         if (!$isNew && $this->photoId) {
             Craft::$app->getUsers()->relocateUserPhoto($this);
         }
+
+        $this->setDirtyAttributes($dirtyAttributes);
 
         parent::afterSave($isNew);
 
@@ -1468,7 +1513,7 @@ class User extends Element implements IdentityInterface
 
                 foreach ($userRefs as $table => $column) {
                     Db::update($table, [
-                        $column => $this->inheritorOnDelete->id
+                        $column => $this->inheritorOnDelete->id,
                     ], [
                         $column => $this->id,
                     ], [], false);

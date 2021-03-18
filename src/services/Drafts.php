@@ -57,14 +57,28 @@ class Drafts extends Component
     const EVENT_AFTER_MERGE_SOURCE_CHANGES = 'afterMergeSource';
 
     /**
-     * @event DraftEvent The event that is triggered before a draft is applied to its source element.
+     * @event DraftEvent The event that is triggered before a draft is published.
+     * @since 3.6.0
      */
-    const EVENT_BEFORE_APPLY_DRAFT = 'beforeApplyDraft';
+    const EVENT_BEFORE_PUBLISH_DRAFT = 'beforePublishDraft';
 
     /**
-     * @event DraftEvent The event that is triggered after a draft is applied to its source element.
+     * @event DraftEvent The event that is triggered after a draft is published.
+     * @since 3.6.0
      */
-    const EVENT_AFTER_APPLY_DRAFT = 'afterApplyDraft';
+    const EVENT_AFTER_PUBLISH_DRAFT = 'afterPublishDraft';
+
+    /**
+     * @event DraftEvent The event that is triggered before a draft is published.
+     * @deprecated in 3.6.0. Use [[EVENT_BEFORE_PUBLISH_DRAFT]] instead.
+     */
+    const EVENT_BEFORE_APPLY_DRAFT = self::EVENT_BEFORE_PUBLISH_DRAFT;
+
+    /**
+     * @event DraftEvent The event that is triggered after a draft is published.
+     * @deprecated in 3.6.0. Use [[EVENT_AFTER_PUBLISH_DRAFT]] instead.
+     */
+    const EVENT_AFTER_APPLY_DRAFT = self::EVENT_AFTER_PUBLISH_DRAFT;
 
     /**
      * @var Connection|array|string The database connection to use
@@ -138,22 +152,13 @@ class Drafts extends Component
         $notes = $event->draftNotes;
 
         if ($name === null || $name === '') {
-            $draftNames = (new Query())
-                ->select(['name'])
-                ->from([Table::DRAFTS])
-                ->where(['sourceId' => $source->id])
-                ->column();
-            $draftNames = array_flip($draftNames);
-            $num = count($draftNames);
-            do {
-                $name = Craft::t('app', 'Draft {num}', ['num' => ++$num]);
-            } while (isset($draftNames[$name]));
+            $name = $this->generateDraftName($source->id);
         }
 
         $transaction = $this->db->beginTransaction();
         try {
             // Create the draft row
-            $draftId = $this->_insertDraftRow($source->id, $creatorId, $name, $notes, $source::trackChanges());
+            $draftId = $this->insertDraftRow($name, $notes, $creatorId, $source->id, $source::trackChanges());
 
             $newAttributes['draftId'] = $draftId;
             $newAttributes['behaviors']['draft'] = [
@@ -189,29 +194,57 @@ class Drafts extends Component
     }
 
     /**
+     * Returns the next auto-generated draft name that should be assigned, for the given source element.
+     *
+     * @param int $sourceId The source element’s ID
+     * @return string
+     * @since 3.6.5
+     */
+    public function generateDraftName(int $sourceId): string
+    {
+        // Get all of the source's current draft names
+        $draftNames = (new Query())
+            ->select(['name'])
+            ->from([Table::DRAFTS])
+            ->where(['sourceId' => $sourceId])
+            ->column();
+        $draftNames = array_flip($draftNames);
+
+        // Find one that isn't taken
+        $num = count($draftNames);
+        do {
+            $name = Craft::t('app', 'Draft {num}', ['num' => ++$num]);
+        } while (isset($draftNames[$name]));
+
+        return $name;
+    }
+
+    /**
      * Saves an element as a draft.
      *
      * @param ElementInterface $element
-     * @param int $creatorId
+     * @param int|null $creatorId
      * @param string|null $name
      * @param string|null $notes
+     * @param bool $markAsSaved
      * @return bool
      * @throws \Throwable
      */
-    public function saveElementAsDraft(ElementInterface $element, int $creatorId, string $name = null, string $notes = null): bool
+    public function saveElementAsDraft(ElementInterface $element, ?int $creatorId = null, ?string $name = null, ?string $notes = null, bool $markAsSaved = true): bool
     {
         if ($name === null) {
             $name = Craft::t('app', 'First draft');
         }
 
         // Create the draft row
-        $draftId = $this->_insertDraftRow(null, $creatorId, $name, $notes);
+        $draftId = $this->insertDraftRow($name, $notes, $creatorId);
 
         $element->draftId = $draftId;
         $element->attachBehavior('draft', new DraftBehavior([
             'creatorId' => $creatorId,
             'draftName' => $name,
             'draftNotes' => $notes,
+            'markAsSaved' => $markAsSaved,
         ]));
 
         // Try to save and return the result
@@ -344,13 +377,14 @@ class Drafts extends Component
     }
 
     /**
-     * Applies a draft onto its source element.
+     * Publishes a draft.
      *
      * @param ElementInterface $draft The draft
      * @return ElementInterface The updated source element
      * @throws \Throwable
+     * @since 3.6.0
      */
-    public function applyDraft(ElementInterface $draft): ElementInterface
+    public function publishDraft(ElementInterface $draft): ElementInterface
     {
         /** @var ElementInterface|DraftBehavior $draft */
         /** @var DraftBehavior $behavior */
@@ -375,9 +409,9 @@ class Drafts extends Component
             }
         }
 
-        // Fire a 'beforeApplyDraft' event
-        if ($this->hasEventHandlers(self::EVENT_BEFORE_APPLY_DRAFT)) {
-            $this->trigger(self::EVENT_BEFORE_APPLY_DRAFT, new DraftEvent([
+        // Fire a 'beforePublishDraft' event
+        if ($this->hasEventHandlers(self::EVENT_BEFORE_PUBLISH_DRAFT)) {
+            $this->trigger(self::EVENT_BEFORE_PUBLISH_DRAFT, new DraftEvent([
                 'source' => $source,
                 'creatorId' => $behavior->creatorId,
                 'draftName' => $behavior->draftName,
@@ -387,6 +421,7 @@ class Drafts extends Component
         }
 
         $elementsService = Craft::$app->getElements();
+        $draftNotes = $draft->draftNotes;
 
         $transaction = $this->db->beginTransaction();
         try {
@@ -404,7 +439,7 @@ class Drafts extends Component
                     'level' => $source->level,
                     'dateCreated' => $source->dateCreated,
                     'draftId' => null,
-                    'revisionNotes' => $draft->draftNotes ?: Craft::t('app', 'Applied “{name}”', ['name' => $draft->draftName]),
+                    'revisionNotes' => $draftNotes ?: Craft::t('app', 'Applied “{name}”', ['name' => $draft->draftName]),
                 ]);
             } else {
                 // Detach the draft behavior
@@ -415,6 +450,7 @@ class Drafts extends Component
                 try {
                     $newSource = $elementsService->duplicateElement($draft, [
                         'draftId' => null,
+                        'revisionNotes' => $draftNotes,
                     ]);
                 } catch (\Throwable $e) {
                     // Don't throw it just yet, until we reattach the draft behavior
@@ -445,9 +481,9 @@ class Drafts extends Component
             throw $e;
         }
 
-        // Fire an 'afterApplyDraft' event
-        if ($this->hasEventHandlers(self::EVENT_AFTER_APPLY_DRAFT)) {
-            $this->trigger(self::EVENT_AFTER_APPLY_DRAFT, new DraftEvent([
+        // Fire an 'afterPublishDraft' event
+        if ($this->hasEventHandlers(self::EVENT_AFTER_PUBLISH_DRAFT)) {
+            $this->trigger(self::EVENT_AFTER_PUBLISH_DRAFT, new DraftEvent([
                 'source' => $newSource,
                 'creatorId' => $behavior->creatorId,
                 'draftName' => $behavior->draftName,
@@ -460,14 +496,24 @@ class Drafts extends Component
     }
 
     /**
+     * Publishes a draft.
+     *
+     * @param ElementInterface $draft The draft
+     * @return ElementInterface The updated source element
+     * @throws \Throwable
+     * @deprecated in 3.6.0. Use [[publishDraft()]] instead.
+     */
+    public function applyDraft(ElementInterface $draft): ElementInterface
+    {
+        return $this->publishDraft($draft);
+    }
+
+    /**
      * Deletes any sourceless drafts that were never formally saved.
      *
-     * This method will check the <config3:purgeUnsavedDraftsDuration> config
-     * setting, and if it is set to a valid duration, it will delete any
-     * sourceless drafts that were created that duration ago, and have still not
-     * been formally saved.
+     * @return void
      */
-    public function purgeUnsavedDrafts()
+    public function purgeUnsavedDrafts(): void
     {
         $generalConfig = Craft::$app->getConfig()->getGeneral();
 
@@ -483,8 +529,9 @@ class Drafts extends Component
             ->select(['e.draftId', 'e.type'])
             ->from(['e' => Table::ELEMENTS])
             ->innerJoin(['d' => Table::DRAFTS], '[[d.id]] = [[e.draftId]]')
-            ->where(['d.sourceId' => null])
-            ->andWhere(['<', 'e.dateCreated', Db::prepareDateForDb($pastTime)])
+            ->where(['d.saved' => false])
+            ->andWhere(['d.sourceId' => null])
+            ->andWhere(['<', 'e.dateUpdated', Db::prepareDateForDb($pastTime)])
             ->all();
 
         $elementsService = Craft::$app->getElements();
@@ -509,22 +556,23 @@ class Drafts extends Component
                 ], [], $this->db);
             }
 
-            Craft::info("Just deleted unsaved draft ID {$draftInfo['draftId']}", __METHOD__);
+            Craft::info("Deleted unsaved draft {$draftInfo['draftId']}", __METHOD__);
         }
     }
 
     /**
      * Creates a new row in the `drafts` table.
      *
-     * @param int|null $sourceId
-     * @param int $creatorId
      * @param string|null $name
      * @param string|null $notes
+     * @param int|null $creatorId
+     * @param int|null $sourceId
      * @param bool $trackChanges
      * @return int The new draft ID
      * @throws DbException
+     * @since 3.6.4
      */
-    private function _insertDraftRow(int $sourceId = null, int $creatorId, string $name = null, string $notes = null, bool $trackChanges = false): int
+    public function insertDraftRow(?string $name, ?string $notes = null, int $creatorId = null, ?int $sourceId = null, bool $trackChanges = false): int
     {
         Db::insert(Table::DRAFTS, [
             'sourceId' => $sourceId,

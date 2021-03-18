@@ -36,11 +36,15 @@ Craft.ColorInput = Garnish.Base.extend({
             .addClass('color-preview-input')
             .appendTo(this.$colorPreview);
 
+        this.addListener(this.$colorInput, 'click', function (ev) {
+            ev.stopPropagation();
+        });
+
         this.addListener(this.$colorContainer, 'click', function() {
             this.$colorInput.trigger('click');
         });
 
-        this.addListener(this.$colorInput, 'change', 'updateColor');
+        this.addListener(this.$colorInput, 'input', 'updateColor');
     },
 
     updateColor: function() {
@@ -59,7 +63,7 @@ Craft.ColorInput = Garnish.Base.extend({
 
         // Make sure the value starts with a #
         if (val[0] !== '#') {
-            val = '#'+val;
+            val = '#' + val;
             this.$input.val(val);
         }
 
@@ -72,10 +76,8 @@ Craft.ColorInput = Garnish.Base.extend({
 }, {
     _browserSupportsColorInputs: null,
 
-    doesBrowserSupportColorInputs: function()
-    {
-        if (Craft.ColorInput._browserSupportsColorInputs === null)
-        {
+    doesBrowserSupportColorInputs: function() {
+        if (Craft.ColorInput._browserSupportsColorInputs === null) {
         }
 
         return Craft.ColorInput._browserSupportsColorInputs;

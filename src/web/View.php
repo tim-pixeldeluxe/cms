@@ -15,13 +15,12 @@ use craft\helpers\FileHelper;
 use craft\helpers\Html;
 use craft\helpers\Json;
 use craft\helpers\Path;
+use craft\helpers\Session as SessionHelper;
 use craft\helpers\StringHelper;
 use craft\web\twig\Environment;
 use craft\web\twig\Extension;
 use craft\web\twig\Template;
 use craft\web\twig\TemplateLoader;
-use JSMin\JSMin;
-use Minify_CSSmin;
 use Twig\Error\LoaderError as TwigLoaderError;
 use Twig\Error\RuntimeError as TwigRuntimeError;
 use Twig\Error\SyntaxError as TwigSyntaxError;
@@ -98,12 +97,14 @@ class View extends \yii\web\View
     /**
      * @var bool Whether to minify CSS registered with [[registerCss()]]
      * @since 3.4.0
+     * @deprecated in 3.6.0.
      */
     public $minifyCss = false;
 
     /**
      * @var bool Whether to minify JS registered with [[registerJs()]]
      * @since 3.4.0
+     * @deprecated in 3.6.0
      */
     public $minifyJs = false;
 
@@ -478,6 +479,7 @@ class View extends \yii\web\View
      * @throws TwigRuntimeError
      * @throws TwigSyntaxError
      * @throws Exception if $templateMode is invalid
+     * @deprecated in 3.6.0.
      */
     public function renderTemplateMacro(string $template, string $macro, array $args = [], string $templateMode = null): string
     {
@@ -929,24 +931,6 @@ class View extends \yii\web\View
     }
 
     /**
-     * @inheritdoc
-     * @since 3.4.0
-     */
-    public function registerCss($css, $options = [], $key = null)
-    {
-        if ($this->minifyCss) {
-            // Sanity check to work around https://github.com/tubalmartin/YUI-CSS-compressor-PHP-port/issues/58
-            if (preg_match('/\{[^\}]*$/', $css, $matches, PREG_OFFSET_CAPTURE)) {
-                Craft::warning("Unable to minify CSS due to an unclosed CSS block at offset {$matches[0][1]}.", __METHOD__);
-            } else {
-                $css = Minify_CSSmin::minify($css);
-            }
-        }
-
-        parent::registerCss($css, $options, $key);
-    }
-
-    /**
      * Registers a hi-res CSS code block.
      *
      * @param string $css the CSS code block to be registered
@@ -978,10 +962,6 @@ class View extends \yii\web\View
     {
         // Trim any whitespace and ensure it ends with a semicolon.
         $js = StringHelper::ensureRight(trim($js, " \t\n\r\0\x0B"), ';');
-
-        if ($this->minifyJs) {
-            $js = JSMin::minify($js);
-        }
 
         parent::registerJs($js, $position, $key);
     }
@@ -1346,7 +1326,7 @@ JS;
         // Validate
         if (!in_array($templateMode, [
             self::TEMPLATE_MODE_CP,
-            self::TEMPLATE_MODE_SITE
+            self::TEMPLATE_MODE_SITE,
         ], true)
         ) {
             throw new Exception('"' . $templateMode . '" is not a valid template mode');
@@ -1812,9 +1792,9 @@ JS;
             return;
         }
 
-        $session = Craft::$app->getSession();
+        if (SessionHelper::exists()) {
+            $session = Craft::$app->getSession();
 
-        if ($session->getIsActive()) {
             foreach ($session->getAssetBundleFlashes(true) as $name => $position) {
                 if (!is_subclass_of($name, YiiAssetBundle::class)) {
                     throw new Exception("$name is not an asset bundle");
@@ -1823,7 +1803,7 @@ JS;
                 $this->registerAssetBundle($name, $position);
             }
 
-            foreach ($session->getJsFlashes(true) as list($js, $position, $key)) {
+            foreach ($session->getJsFlashes(true) as [$js, $position, $key]) {
                 $this->registerJs($js, $position, $key);
             }
         }

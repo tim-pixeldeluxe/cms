@@ -19,6 +19,7 @@ use craft\helpers\Db;
 use craft\helpers\ElementHelper;
 use craft\helpers\Html;
 use craft\helpers\StringHelper;
+use craft\models\GqlSchema;
 use craft\records\Field as FieldRecord;
 use craft\validators\HandleValidator;
 use craft\validators\UniqueValidator;
@@ -221,8 +222,8 @@ abstract class Field extends SavableComponent implements FieldInterface
                 self::TRANSLATION_METHOD_SITE,
                 self::TRANSLATION_METHOD_SITE_GROUP,
                 self::TRANSLATION_METHOD_LANGUAGE,
-                self::TRANSLATION_METHOD_CUSTOM
-            ]
+                self::TRANSLATION_METHOD_CUSTOM,
+            ],
         ];
         $rules[] = [
             ['handle'],
@@ -277,7 +278,7 @@ abstract class Field extends SavableComponent implements FieldInterface
                 'uri',
                 'url',
                 'username', // user-specific
-            ]
+            ],
         ];
         $rules[] = [
             ['handle'],
@@ -312,7 +313,7 @@ abstract class Field extends SavableComponent implements FieldInterface
      */
     public function getIsTranslatable(ElementInterface $element = null): bool
     {
-        return ($this->translationMethod !== self::TRANSLATION_METHOD_NONE);
+        return $this->translationMethod !== self::TRANSLATION_METHOD_NONE;
     }
 
     /**
@@ -333,6 +334,14 @@ abstract class Field extends SavableComponent implements FieldInterface
     public function getTranslationKey(ElementInterface $element): string
     {
         return ElementHelper::translationKey($element, $this->translationMethod, $this->translationKeyFormat);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function useFieldset(): bool
+    {
+        return false;
     }
 
     /**
@@ -559,6 +568,14 @@ abstract class Field extends SavableComponent implements FieldInterface
     /**
      * @inheritdoc
      */
+    public function includeInGqlSchema(GqlSchema $schema): bool
+    {
+        return true;
+    }
+
+    /**
+     * @inheritdoc
+     */
     public function getContentGqlType()
     {
         return Type::string();
@@ -585,7 +602,7 @@ abstract class Field extends SavableComponent implements FieldInterface
     {
         return [
             'name' => $this->handle,
-            'type' => Type::listOf(QueryArgument::getType())
+            'type' => Type::listOf(QueryArgument::getType()),
         ];
     }
 

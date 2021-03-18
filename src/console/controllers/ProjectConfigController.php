@@ -10,10 +10,12 @@ namespace craft\console\controllers;
 use Craft;
 use craft\console\Controller;
 use craft\db\Table;
+use craft\events\ConfigEvent;
 use craft\helpers\Console;
 use craft\helpers\Db;
 use craft\helpers\ProjectConfig;
 use craft\services\Plugins;
+use craft\services\ProjectConfig as ProjectConfigService;
 use yii\console\ExitCode;
 
 /**
@@ -34,6 +36,21 @@ class ProjectConfigController extends Controller
      * @since 3.5.13
      */
     public $invert = false;
+
+    /**
+     * @var int Counter of the total paths that have been processed.
+     */
+    private $_pathCount = 0;
+
+    /**
+     * @var array The config paths that are currently being processed.
+     */
+    private $_processingPaths;
+
+    /**
+     * @var array The config paths that have finished being processed.
+     */
+    private $_completedPaths = [];
 
     /**
      * @inheritdoc
@@ -134,32 +151,96 @@ class ProjectConfigController extends Controller
             // Any plugins need to be installed/uninstalled?
             $loadedConfigPlugins = array_keys($projectConfig->get(Plugins::CONFIG_PLUGINS_KEY) ?? []);
             $yamlPlugins = array_keys($projectConfig->get(Plugins::CONFIG_PLUGINS_KEY, true) ?? []);
-            $this->_uninstallPlugins(array_diff($loadedConfigPlugins, $yamlPlugins));
 
             if (!$this->_installPlugins(array_diff($yamlPlugins, $loadedConfigPlugins))) {
                 $this->stdout('Aborting config apply process' . PHP_EOL, Console::FG_RED);
                 return ExitCode::UNSPECIFIED_ERROR;
             }
 
-            $this->stdout("Applying changes from your project config files ... ", Console::FG_YELLOW);
+            $this->_uninstallPlugins(array_diff($loadedConfigPlugins, $yamlPlugins));
+
+            $this->stdout('Applying changes from your project config files ...');
+
             try {
                 $forceUpdate = $projectConfig->forceUpdate;
                 $projectConfig->forceUpdate = $this->force;
+                $this->_processingPaths = [];
+
+                $projectConfig->on(ProjectConfigService::EVENT_ADD_ITEM, [$this, 'onStartProcessingItem'], ['label' => 'adding'], false);
+                $projectConfig->on(ProjectConfigService::EVENT_ADD_ITEM, [$this, 'onFinishProcessingItem'], ['label' => 'adding'], true);
+                $projectConfig->on(ProjectConfigService::EVENT_REMOVE_ITEM, [$this, 'onStartProcessingItem'], ['label' => 'removing'], false);
+                $projectConfig->on(ProjectConfigService::EVENT_REMOVE_ITEM, [$this, 'onFinishProcessingItem'], ['label' => 'removing'], true);
+                $projectConfig->on(ProjectConfigService::EVENT_UPDATE_ITEM, [$this, 'onStartProcessingItem'], ['label' => 'updating'], false);
+                $projectConfig->on(ProjectConfigService::EVENT_UPDATE_ITEM, [$this, 'onFinishProcessingItem'], ['label' => 'updating'], true);
+
                 $projectConfig->applyYamlChanges();
+
                 $projectConfig->forceUpdate = $forceUpdate;
             } catch (\Throwable $e) {
-                $this->stderr('error: ' . $e->getMessage() . PHP_EOL, Console::FG_RED);
+                $this->stderr("\nerror: " . $e->getMessage() . PHP_EOL, Console::FG_RED);
                 Craft::$app->getErrorHandler()->logException($e);
                 return ExitCode::UNSPECIFIED_ERROR;
             }
         }
 
-        $this->stdout('done' . PHP_EOL, Console::FG_GREEN);
+        $this->stdout("\nFinished applying changes\n", Console::FG_GREEN);
         return ExitCode::OK;
     }
 
     /**
-     * Alias for `apply`.
+     * Called when a project config item has started getting processed.
+     *
+     * @param ConfigEvent $event
+     * @return void
+     * @since 3.6.10
+     */
+    public function onStartProcessingItem(ConfigEvent $event): void
+    {
+        if (isset($this->_processingPaths[$event->path]) || isset($this->_completedPaths[$event->path])) {
+            return;
+        }
+
+        $this->stdout("\n");
+
+        // Are we in the middle of processing another path(s)?
+        $otherPaths = count($this->_processingPaths);
+        if ($otherPaths !== 0) {
+            $this->stdout(str_repeat('  ', $otherPaths));
+        }
+
+        $this->stdout("- {$event->data['label']} ");
+        $this->stdout($event->path, Console::FG_CYAN);
+        $this->stdout(' ... ');
+
+        $this->_processingPaths[$event->path] = ++$this->_pathCount;
+    }
+
+    /**
+     * Called when a project config item has finished getting processed.
+     *
+     * @param ConfigEvent $event
+     * @return void
+     * @since 3.6.10
+     */
+    public function onFinishProcessingItem(ConfigEvent $event): void
+    {
+        if (!isset($this->_processingPaths[$event->path])) {
+            return;
+        }
+
+        // Have any other paths been processed since this one started?
+        if ($this->_processingPaths[$event->path] !== $this->_pathCount) {
+            $this->stdout("\n" . str_repeat('  ', count($this->_processingPaths) - 1) . '  ');
+        }
+
+        $this->stdout('done', Console::FG_GREEN);
+
+        unset($this->_processingPaths[$event->path]);
+        $this->_completedPaths[$event->path] = true;
+    }
+
+    /**
+     * DEPRECATED. Use `project-config/apply` instead.
      *
      * @return int
      * @deprecated in 3.5.0. Use [[actionApply()]] instead.

@@ -13,9 +13,6 @@ use craft\services\Gql as GqlService;
 use craft\services\ProjectConfig as ProjectConfigService;
 use craft\services\Sites;
 use craft\services\UserGroups;
-use SebastianBergmann\Diff\Differ;
-use SebastianBergmann\Diff\Output\UnifiedDiffOutputBuilder;
-use Symfony\Component\Yaml\Yaml;
 use yii\base\InvalidConfigException;
 use yii\caching\ChainedDependency;
 use yii\caching\ExpressionDependency;
@@ -179,39 +176,69 @@ class ProjectConfig
      */
     public static function cleanupConfig(array $config): array
     {
-        $remove = [];
+        $cleanConfig = [];
 
-        foreach ($config as $key => &$value) {
-            // Only scalars, arrays and simple objects allowed.
-            if ($value instanceof \StdClass) {
-                $value = (array)$value;
+        foreach ($config as $key => $value) {
+            $value = self::_cleanupConfigValue($value);
+
+            // Ignore empty arrays
+            if (!is_array($value) || !empty($value)) {
+                $cleanConfig[$key] = $value;
             }
+        }
 
-            if (!empty($value) && !is_scalar($value) && !is_array($value)) {
-                Craft::info('Unexpected data encountered in config data - ' . print_r($value, true));
+        ksort($cleanConfig);
+        return $cleanConfig;
+    }
 
-                throw new InvalidConfigException('Unexpected data encountered in config data');
-            }
+    /**
+     * Cleans a config value.
+     *
+     * @param mixed $value
+     * @return mixed
+     * @throws InvalidConfigException
+     */
+    private static function _cleanupConfigValue($value)
+    {
+        // Only scalars, arrays and simple objects allowed.
+        if ($value instanceof \StdClass) {
+            $value = (array)$value;
+        }
 
-            if (is_array($value)) {
-                $value = static::cleanupConfig($value);
+        if (!empty($value) && !is_scalar($value) && !is_array($value)) {
+            Craft::info('Unexpected data encountered in config data - ' . print_r($value, true));
+            throw new InvalidConfigException('Unexpected data encountered in config data');
+        }
 
-                if (empty($value)) {
-                    $remove[] = $key;
+        if (is_array($value)) {
+            // Is this a packed array?
+            if (isset($value[ProjectConfigService::CONFIG_ASSOC_KEY])) {
+                $cleanPackedArray = [];
+
+                foreach ($value[ProjectConfigService::CONFIG_ASSOC_KEY] as $pKey => $pArray) {
+                    // Make sure it has a value
+                    if (isset($pArray[1])) {
+                        $pArray[1] = self::_cleanupConfigValue($pArray[1]);
+
+                        // Ignore empty arrays
+                        if (!is_array($pArray[1]) || !empty($pArray[1])) {
+                            $cleanPackedArray[] = $pArray;
+                        }
+                    }
                 }
+
+                if (!empty($cleanPackedArray)) {
+                    $value[ProjectConfigService::CONFIG_ASSOC_KEY] = $cleanPackedArray;
+                } else {
+                    // Set $value to an empty array so it doesn't make it into the final config
+                    $value = [];
+                }
+            } else {
+                $value = static::cleanupConfig($value);
             }
         }
 
-        unset($value);
-
-        // Remove empty stuff
-        foreach ($remove as $removeKey) {
-            unset($config[$removeKey]);
-        }
-
-        ksort($config);
-
-        return $config;
+        return $value;
     }
 
     /**
@@ -389,7 +416,7 @@ class ProjectConfig
      * @param string|null $path
      * @return bool whether the config was split
      */
-    private static function splitConfigIntoComponentsInternal(array &$config, array &$splitConfig, string $path = null): bool
+    private static function splitConfigIntoComponentsInternal(array &$config, array &$splitConfig, ?string $path = null): bool
     {
         $split = false;
 
@@ -460,26 +487,13 @@ class ProjectConfig
         $cacheKey = ProjectConfigService::DIFF_CACHE_KEY . ($invert ? ':reverse' : '');
 
         return Craft::$app->getCache()->getOrSet($cacheKey, function() use ($projectConfig, $invert): string {
-            $currentConfig = $projectConfig->get();
-            $pendingConfig = $projectConfig->get(null, true);
-            $currentYaml = Yaml::dump(static::cleanupConfig($currentConfig), 20, 2);
-            $pendingYaml = Yaml::dump(static::cleanupConfig($pendingConfig), 20, 2);
-            $builder = new UnifiedDiffOutputBuilder('');
-            $differ = new Differ($builder);
+            $currentConfig = static::cleanupConfig($projectConfig->get());
+            $pendingConfig = static::cleanupConfig($projectConfig->get(null, true));
 
             if ($invert) {
-                $diff = $differ->diff($pendingYaml, $currentYaml);
-            } else {
-                $diff = $differ->diff($currentYaml, $pendingYaml);
+                return Diff::diff($pendingConfig, $currentConfig);
             }
-
-            // Cleanup
-            $diff = preg_replace("/^@@ @@\n/", '', $diff);
-            $diff = preg_replace('/^[\+\-]?/m', '$0 ', $diff);
-            $diff = str_replace(' @@ @@', '...', $diff);
-            $diff = rtrim($diff);
-
-            return $diff;
+            return Diff::diff($currentConfig, $pendingConfig);
         }, null, new ChainedDependency([
             'dependencies' => [
                 $projectConfig->getCacheDependency(),
@@ -498,7 +512,7 @@ class ProjectConfig
      * @param int|null $timestamp The updated `dateModified` value. If `null`, the current time will be used.
      * @since 3.5.14
      */
-    public static function touch(int $timestamp = null)
+    public static function touch(?int $timestamp = null)
     {
         if ($timestamp === null) {
             $timestamp = time();

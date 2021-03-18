@@ -82,7 +82,7 @@ class RecentEntries extends Widget
     {
         return Craft::$app->getView()->renderTemplate('_components/widgets/RecentEntries/settings',
             [
-                'widget' => $this
+                'widget' => $this,
             ]);
     }
 
@@ -96,7 +96,7 @@ class RecentEntries extends Widget
 
             if ($section) {
                 $title = Craft::t('app', 'Recent {section} Entries', [
-                    'section' => Craft::t('site', $section->name)
+                    'section' => Craft::t('site', $section->name),
                 ]);
             }
         }
@@ -115,7 +115,7 @@ class RecentEntries extends Widget
             if ($site) {
                 $title = Craft::t('app', '{title} ({site})', [
                     'title' => $title,
-                    'site' => Craft::t('site', $site->name),
+                    'site' => Craft::t('site', $site->getName()),
                 ]);
             }
         }
@@ -144,7 +144,7 @@ class RecentEntries extends Widget
 
         return $view->renderTemplate('_components/widgets/RecentEntries/body',
             [
-                'entries' => $entries
+                'entries' => $entries,
             ]);
     }
 

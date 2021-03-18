@@ -21,7 +21,7 @@ use craft\web\twig\Extension;
 use Twig\Template as TwigTemplate;
 use yii\base\Application;
 use yii\base\Component;
-use yii\db\IntegrityException;
+use yii\db\Exception;
 
 /**
  * Deprecator service.
@@ -91,7 +91,7 @@ class Deprecator extends Component
         $traces = debug_backtrace();
 
         if ($file === null) {
-            list($file, $line) = $this->_findOrigin($traces);
+            [$file, $line] = $this->_findOrigin($traces);
         }
 
         if ($this->throwExceptions) {
@@ -108,7 +108,7 @@ class Deprecator extends Component
             'file' => $file,
             'line' => $line,
             'message' => $message,
-            'traces' => $this->_cleanTraces($traces)
+            'traces' => $this->_cleanTraces($traces),
         ]);
     }
 
@@ -134,8 +134,9 @@ class Deprecator extends Component
                     'traces' => Json::encode($log->traces),
                 ]);
                 $log->id = $db->getLastInsertID();
-            } catch (IntegrityException $e) {
-                // todo: remove this try/catch after the next breakpoint
+            } catch (Exception $e) {
+                Craft::warning("Couldn't save deprecation warning: {$e->getMessage()}", __METHOD__);
+                // Craft probably isn’t installed yet
                 break;
             }
         }

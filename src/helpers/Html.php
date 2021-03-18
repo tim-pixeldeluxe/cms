@@ -104,6 +104,42 @@ class Html extends \yii\helpers\Html
     }
 
     /**
+     * Generates a hidden `failMessage` input tag.
+     *
+     * @param string $message The flash message to shown on failure
+     * @param array $options The tag options in terms of name-value pairs. These will be rendered as
+     * the attributes of the resulting tag. The values will be HTML-encoded using [[encode()]].
+     * If a value is null, the corresponding attribute will not be rendered.
+     * See [[renderTagAttributes()]] for details on how attributes are being rendered.
+     * @return string The generated hidden input tag
+     * @throws Exception if the validation key could not be written
+     * @throws InvalidConfigException when HMAC generation fails
+     * @since 3.6.6
+     */
+    public static function failMessageInput(string $message, array $options = []): string
+    {
+        return static::hiddenInput('failMessage', Craft::$app->getSecurity()->hashData($message), $options);
+    }
+
+    /**
+     * Generates a hidden `successMessage` input tag.
+     *
+     * @param string $message The flash message to shown on success
+     * @param array $options The tag options in terms of name-value pairs. These will be rendered as
+     * the attributes of the resulting tag. The values will be HTML-encoded using [[encode()]].
+     * If a value is null, the corresponding attribute will not be rendered.
+     * See [[renderTagAttributes()]] for details on how attributes are being rendered.
+     * @return string The generated hidden input tag
+     * @throws Exception if the validation key could not be written
+     * @throws InvalidConfigException when HMAC generation fails
+     * @since 3.6.6
+     */
+    public static function successMessageInput(string $message, array $options = []): string
+    {
+        return static::hiddenInput('successMessage', Craft::$app->getSecurity()->hashData($message), $options);
+    }
+
+    /**
      * @inheritdoc
      * @since 3.3.0
      */
@@ -128,7 +164,7 @@ class Html extends \yii\helpers\Html
      * @return string The modified HTML
      * @since 3.3.0
      */
-    public static function appendToTag(string $tag, string $html, string $ifExists = null): string
+    public static function appendToTag(string $tag, string $html, ?string $ifExists = null): string
     {
         return self::_addToTagInternal($tag, $html, 'htmlEnd', $ifExists);
     }
@@ -144,7 +180,7 @@ class Html extends \yii\helpers\Html
      * @return string The modified HTML
      * @since 3.3.0
      */
-    public static function prependToTag(string $tag, string $html, string $ifExists = null): string
+    public static function prependToTag(string $tag, string $html, ?string $ifExists = null): string
     {
         return self::_addToTagInternal($tag, $html, 'htmlStart', $ifExists);
     }
@@ -162,7 +198,7 @@ class Html extends \yii\helpers\Html
      */
     public static function parseTag(string $tag, int $offset = 0): array
     {
-        list($type, $start) = self::_findTag($tag, $offset);
+        [$type, $start] = self::_findTag($tag, $offset);
         $attributes = static::parseTagAttributes($tag, $start, $attrStart, $attrEnd);
         $end = strpos($tag, '>', $attrEnd) + 1;
         $isVoid = $tag[$end - 2] === '/' || isset(static::$voidElements[$type]);
@@ -251,7 +287,7 @@ class Html extends \yii\helpers\Html
      */
     public static function parseTagAttributes(string $tag, int $offset = 0, int &$start = null, int &$end = null, bool $decode = false): array
     {
-        list($type, $tagStart) = self::_findTag($tag, $offset);
+        [$type, $tagStart] = self::_findTag($tag, $offset);
         $start = $tagStart + strlen($type) + 1;
         $anchor = $start;
         $attributes = [];
@@ -374,7 +410,7 @@ class Html extends \yii\helpers\Html
             $styles = ArrayHelper::filterEmptyStringsFromArray(preg_split('/\s*;\s*/', $value));
             $normalized = [];
             foreach ($styles as $style) {
-                list($n, $v) = array_pad(preg_split('/\s*:\s*/', $style, 2), 2, '');
+                [$n, $v] = array_pad(preg_split('/\s*:\s*/', $style, 2), 2, '');
                 $normalized[$n] = $v;
             }
             return $normalized;
@@ -409,7 +445,7 @@ class Html extends \yii\helpers\Html
      * @param string|null $ifExists
      * @return string
      */
-    private static function _addToTagInternal(string $tag, string $html, string $position, string $ifExists = null): string
+    private static function _addToTagInternal(string $tag, string $html, string $position, ?string $ifExists = null): string
     {
         $info = static::parseTag($tag);
 
@@ -420,7 +456,7 @@ class Html extends \yii\helpers\Html
 
         if ($ifExists) {
             // See if we have a child of the same type
-            list($type) = self::_findTag($html);
+            [$type] = self::_findTag($html);
             $child = ArrayHelper::firstWhere($info['children'], 'type', $type, true);
 
             if ($child) {
@@ -618,7 +654,7 @@ class Html extends \yii\helpers\Html
 
         // ID references in url() calls
         $html = preg_replace_callback(
-            "/(?<=url\\(#)[^'\"\s]*(?=\\))/i",
+            "/(?<=url\\(#)[^'\"\s\)]*(?=\\))/i",
             function(array $match) use ($namespace, $ids): string {
                 if (isset($ids[$match[0]])) {
                     return $namespace . '-' . $match[0];
@@ -713,7 +749,7 @@ class Html extends \yii\helpers\Html
      * @throws InvalidArgumentException if `$file` is an invalid file path
      * @since 3.5.13
      */
-    public static function dataUrl(string $file, string $mimeType = null): string
+    public static function dataUrl(string $file, ?string $mimeType = null): string
     {
         if (!is_file($file)) {
             throw new InvalidArgumentException("Invalid file path: $file");
@@ -740,7 +776,7 @@ class Html extends \yii\helpers\Html
      * @throws InvalidArgumentException if `$file` is an invalid file path
      * @since 3.5.13
      */
-    public static function dataUrlFromString(string $contents, string $mimeType = null): string
+    public static function dataUrlFromString(string $contents, ?string $mimeType = null): string
     {
         return 'data:' . ($mimeType ? "$mimeType;" : '') . 'base64,' . base64_encode($contents);
     }

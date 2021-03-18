@@ -960,8 +960,10 @@ class Elements extends Component
             throw new Exception('Attempting to duplicate an unsaved element.');
         }
 
-        // Create our first clone for the $element's site
+        // Ensure all fields have been normalized
         $element->getFieldValues();
+
+        // Create our first clone for the $element's site
         $mainClone = clone $element;
         $mainClone->id = null;
         $mainClone->uid = StringHelper::UUID();
@@ -991,6 +993,35 @@ class Elements extends Component
         $supportedSiteIds = ArrayHelper::getColumn($supportedSites, 'siteId');
         if (!in_array($mainClone->siteId, $supportedSiteIds, false)) {
             throw new UnsupportedSiteException($element, $mainClone->siteId, 'Attempting to duplicate an element in an unsupported site.');
+        }
+
+        // Clone any field values that are objects
+        foreach ($mainClone->getFieldValues() as $handle => $value) {
+            if (is_object($value)) {
+                $mainClone->setFieldValue($handle, clone $value);
+            }
+        }
+
+        // If we are duplicating a draft as another draft, create a new draft row
+        if ($mainClone->draftId && $mainClone->draftId === $element->draftId) {
+            /* @var ElementInterface|DraftBehavior $element */
+            /* @var DraftBehavior $draftBehavior */
+            $draftBehavior = $mainClone->getBehavior('draft');
+            $draftsService = Craft::$app->getDrafts();
+            // Are we duplicating a draft of a published element?
+            if ($element->sourceId) {
+                $draftBehavior->draftName = $draftsService->generateDraftName($element->sourceId);
+            } else {
+                $draftBehavior->draftName = Craft::t('app', 'First draft');
+            }
+            $draftBehavior->draftNotes = null;
+            $mainClone->draftId = $draftsService->insertDraftRow(
+                $draftBehavior->draftName,
+                null,
+                Craft::$app->getUser()->getId(),
+                $draftBehavior->sourceId,
+                $draftBehavior->trackChanges
+            );
         }
 
         // Validate
@@ -1077,7 +1108,9 @@ class Elements extends Component
                         continue;
                     }
 
+                    // Ensure all fields have been normalized
                     $siteElement->getFieldValues();
+
                     $siteClone = clone $siteElement;
                     $siteClone->duplicateOf = $siteElement;
                     $siteClone->propagating = true;
@@ -1099,6 +1132,13 @@ class Elements extends Component
 
                     $siteClone->setAttributes($newAttributes, false);
                     $siteClone->siteId = $siteInfo['siteId'];
+
+                    // Clone any field values that are objects
+                    foreach ($siteClone->getFieldValues() as $handle => $value) {
+                        if (is_object($value)) {
+                            $siteClone->setFieldValue($handle, clone $value);
+                        }
+                    }
 
                     if ($element::hasUris()) {
                         // Make sure it has a valid slug
@@ -1165,7 +1205,7 @@ class Elements extends Component
         // Fire a 'beforeUpdateSlugAndUri' event
         if ($this->hasEventHandlers(self::EVENT_BEFORE_UPDATE_SLUG_AND_URI)) {
             $this->trigger(self::EVENT_BEFORE_UPDATE_SLUG_AND_URI, new ElementEvent([
-                'element' => $element
+                'element' => $element,
             ]));
         }
 
@@ -1180,7 +1220,7 @@ class Elements extends Component
         // Fire a 'afterUpdateSlugAndUri' event
         if ($this->hasEventHandlers(self::EVENT_AFTER_UPDATE_SLUG_AND_URI)) {
             $this->trigger(self::EVENT_AFTER_UPDATE_SLUG_AND_URI, new ElementEvent([
-                'element' => $element
+                'element' => $element,
             ]));
         }
 
@@ -1318,7 +1358,7 @@ class Elements extends Component
                         'fieldId' => $relation['fieldId'],
                         'sourceId' => $relation['sourceId'],
                         'sourceSiteId' => $relation['sourceSiteId'],
-                        'targetId' => $prevailingElement->id
+                        'targetId' => $prevailingElement->id,
                     ])
                     ->exists();
 
@@ -1344,7 +1384,7 @@ class Elements extends Component
                     ->from([Table::STRUCTUREELEMENTS])
                     ->where([
                         'structureId' => $structureElement['structureId'],
-                        'elementId' => $prevailingElement->id
+                        'elementId' => $prevailingElement->id,
                     ])
                     ->exists();
 
@@ -1381,7 +1421,7 @@ class Elements extends Component
             if ($this->hasEventHandlers(self::EVENT_AFTER_MERGE_ELEMENTS)) {
                 $this->trigger(self::EVENT_AFTER_MERGE_ELEMENTS, new MergeElementsEvent([
                     'mergedElementId' => $mergedElement->id,
-                    'prevailingElementId' => $prevailingElement->id
+                    'prevailingElementId' => $prevailingElement->id,
                 ]));
             }
 
@@ -1667,7 +1707,7 @@ class Elements extends Component
         ];
 
         $event = new RegisterComponentTypesEvent([
-            'types' => $elementTypes
+            'types' => $elementTypes,
         ]);
         $this->trigger(self::EVENT_REGISTER_ELEMENT_TYPES, $event);
 
@@ -1752,7 +1792,7 @@ class Elements extends Component
                 &$allRefTagTokens
             ) {
                 $matches = array_pad($matches, 6, null);
-                list($fullMatch, $elementType, $ref, $siteId, $attribute, $fallback) = $matches;
+                [$fullMatch, $elementType, $ref, $siteId, $attribute, $fallback] = $matches;
                 if ($fallback === null) {
                     $fallback = $fullMatch;
                 }
@@ -1825,7 +1865,7 @@ class Elements extends Component
                     foreach ($tokensByName as $refName => $tokens) {
                         $element = $elements[$refName] ?? null;
 
-                        foreach ($tokens as list($token, $attribute, $fallback, $fullMatch)) {
+                        foreach ($tokens as [$token, $attribute, $fallback, $fullMatch]) {
                             $search[] = $token;
                             $replace[] = $this->_getRefTokenReplacement($element, $attribute, $fallback, $fullMatch);
                         }
@@ -2180,6 +2220,12 @@ class Elements extends Component
                     }
                 }
 
+                // Pass the instantiated elements to afterPopulate()
+                if (!empty($targetElements)) {
+                    $query->asArray = false;
+                    $query->afterPopulate(array_merge(...$targetElements));
+                }
+
                 // Now eager-load any sub paths
                 if (!empty($map['map']) && !empty($plan->nested)) {
                     $this->_eagerLoadElementsInternal($map['elementType'], array_map('array_values', $targetElements), $plan->nested);
@@ -2270,7 +2316,7 @@ class Elements extends Component
         if ($this->hasEventHandlers(self::EVENT_BEFORE_SAVE_ELEMENT)) {
             $this->trigger(self::EVENT_BEFORE_SAVE_ELEMENT, new ElementEvent([
                 'element' => $element,
-                'isNew' => $isNewElement
+                'isNew' => $isNewElement,
             ]));
         }
 
@@ -2502,7 +2548,7 @@ class Elements extends Component
                     [
                         'and',
                         ['elementId' => $element->id],
-                        ['not', ['siteId' => $supportedSiteIds]]
+                        ['not', ['siteId' => $supportedSiteIds]],
                     ]
                 );
 
@@ -2512,7 +2558,7 @@ class Elements extends Component
                         [
                             'and',
                             ['elementId' => $element->id],
-                            ['not', ['siteId' => $supportedSiteIds]]
+                            ['not', ['siteId' => $supportedSiteIds]],
                         ]
                     );
                 }
@@ -2523,7 +2569,7 @@ class Elements extends Component
         }
 
         // Update search index
-        if ($updateSearchIndex && !$isDraftOrRevision) {
+        if ($updateSearchIndex && !$element->getIsRevision()) {
             if (Craft::$app->getRequest()->getIsConsoleRequest()) {
                 Craft::$app->getSearch()->indexElementAttributes($element);
             } else {
@@ -2531,7 +2577,7 @@ class Elements extends Component
                     'elementType' => get_class($element),
                     'elementId' => $element->id,
                     'siteId' => $propagate ? '*' : $element->siteId,
-                    'fieldHandles' => $element->getDirtyFields(),
+                    'fieldHandles' => $element->getIsDraft() ? [] : $element->getDirtyFields(),
                 ]), 2048);
             }
         }
@@ -2541,7 +2587,7 @@ class Elements extends Component
             $userId = Craft::$app->getUser()->getId();
             $timestamp = Db::prepareDateForDb(new \DateTime());
 
-            foreach ($dirtyAttributes as $attributeName) {
+            foreach ($element->getDirtyAttributes() as $attributeName) {
                 Db::upsert(Table::CHANGEDATTRIBUTES, [
                     'elementId' => $element->id,
                     'siteId' => $element->siteId,

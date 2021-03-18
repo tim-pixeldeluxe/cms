@@ -15,6 +15,7 @@ use craft\elements\User;
 use craft\errors\UploadFailedException;
 use craft\errors\UserLockedException;
 use craft\events\DefineUserContentSummaryEvent;
+use craft\events\InvalidUserTokenEvent;
 use craft\events\LoginFailureEvent;
 use craft\events\RegisterUserActionsEvent;
 use craft\events\UserEvent;
@@ -24,6 +25,7 @@ use craft\helpers\FileHelper;
 use craft\helpers\Html;
 use craft\helpers\Image;
 use craft\helpers\Json;
+use craft\helpers\Session;
 use craft\helpers\UrlHelper;
 use craft\helpers\User as UserHelper;
 use craft\i18n\Locale;
@@ -35,12 +37,14 @@ use craft\web\Request;
 use craft\web\ServiceUnavailableHttpException;
 use craft\web\UploadedFile;
 use craft\web\View;
+use DateTime;
 use yii\base\InvalidArgumentException;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\HttpException;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
+use yii\web\ServerErrorHttpException;
 
 /** @noinspection ClassOverridesFieldOfSuperClassInspection */
 
@@ -98,6 +102,12 @@ class UsersController extends Controller
     const EVENT_DEFINE_CONTENT_SUMMARY = 'defineContentSummary';
 
     /**
+     * @event InvalidUserTokenEvent The event that is triggered when an invalid user token is sent.
+     * @since 3.6.5
+     */
+    const EVENT_INVALID_USER_TOKEN = 'invalidUserToken';
+
+    /**
      * @inheritdoc
      */
     protected $allowAnonymous = [
@@ -105,6 +115,7 @@ class UsersController extends Controller
         'session-info' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,
         'login' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,
         'logout' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,
+        'impersonate-with-token' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,
         'save-user' => self::ALLOW_ANONYMOUS_LIVE,
         'send-activation-email' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,
         'send-password-reset-email' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,
@@ -180,9 +191,10 @@ class UsersController extends Controller
     }
 
     /**
-     * Logs a user in for impersonation. Requires you to be an administrator.
+     * Logs a user in for impersonation.
      *
      * @return Response|null
+     * @throws BadRequestHttpException
      * @throws ForbiddenHttpException
      */
     public function actionImpersonate()
@@ -190,28 +202,112 @@ class UsersController extends Controller
         $this->requirePostRequest();
 
         $userSession = Craft::$app->getUser();
-        $session = Craft::$app->getSession();
-        $userId = $this->request->getBodyParam('userId');
+        $userId = $this->request->getRequiredBodyParam('userId');
+        $user = Craft::$app->getUsers()->getUserById($userId);
+
+        if (!$user) {
+            throw new BadRequestHttpException("Invalid user ID: $userId");
+        }
 
         // Make sure they're allowed to impersonate this user
-        $usersService = Craft::$app->getUsers();
-        $impersonatee = $usersService->getUserById($userId);
-        if (!$usersService->canImpersonate($userSession->getIdentity(), $impersonatee)) {
-            throw new ForbiddenHttpException('You do not have sufficient permissions to impersonate this user');
-        }
+        $this->_enforceImpersonatePermission($user);
 
         // Save the original user ID to the session now so User::findIdentity()
         // knows not to worry if the user isn't active yet
-        $session->set(User::IMPERSONATE_KEY, $userSession->getId());
+        Session::set(User::IMPERSONATE_KEY, $userSession->getId());
 
         if (!$userSession->loginByUserId($userId)) {
-            $session->remove(User::IMPERSONATE_KEY);
+            Session::remove(User::IMPERSONATE_KEY);
             $this->setFailFlash(Craft::t('app', 'There was a problem impersonating this user.'));
             Craft::error($userSession->getIdentity()->username . ' tried to impersonate userId: ' . $userId . ' but something went wrong.', __METHOD__);
             return null;
         }
 
         return $this->_handleSuccessfulLogin();
+    }
+
+    /**
+     * Generates and returns a new impersonation URL
+     *
+     * @return Response
+     * @throws BadRequestHttpException
+     * @throws ForbiddenHttpException
+     * @throws ServerErrorHttpException
+     * @since 3.6.0
+     */
+    public function actionGetImpersonationUrl(): Response
+    {
+        $this->requirePostRequest();
+
+        $userId = $this->request->getBodyParam('userId');
+        $user = Craft::$app->getUsers()->getUserById($userId);
+
+        if (!$user) {
+            throw new BadRequestHttpException("Invalid user ID: $userId");
+        }
+
+        // Make sure they're allowed to impersonate this user
+        $this->_enforceImpersonatePermission($user);
+
+        // Create a single-use token that expires in an hour
+        $token = Craft::$app->getTokens()->createToken([
+            'users/impersonate-with-token', [
+                'userId' => $userId,
+                'prevUserId' => Craft::$app->getUser()->getId(),
+            ],
+        ], 1, new DateTime('+1 hour'));
+
+        if (!$token) {
+            throw new ServerErrorHttpException('Unable to create the invalidation token.');
+        }
+
+        $url = $user->can('accessCp') ? UrlHelper::cpUrl() : UrlHelper::siteUrl();
+        $url = UrlHelper::urlWithToken($url, $token);
+
+        return $this->asJson(compact('url'));
+    }
+
+    /**
+     * Logs a user in for impersonation via an impersonation token.
+     *
+     * @param int $userId
+     * @param int $prevUserId
+     * @return Response|null
+     * @throws BadRequestHttpException
+     * @throws ForbiddenHttpException
+     * @since 3.6.0
+     */
+    public function actionImpersonateWithToken(int $userId, int $prevUserId)
+    {
+        $this->requireToken();
+
+        $userSession = Craft::$app->getUser();
+
+        // Save the original user ID to the session now so User::findIdentity()
+        // knows not to worry if the user isn't active yet
+        Session::set(User::IMPERSONATE_KEY, $prevUserId);
+
+        if (!$userSession->loginByUserId($userId)) {
+            Session::remove(User::IMPERSONATE_KEY);
+            $this->setFailFlash(Craft::t('app', 'There was a problem impersonating this user.'));
+            Craft::error($userSession->getIdentity()->username . ' tried to impersonate userId: ' . $userId . ' but something went wrong.', __METHOD__);
+            return null;
+        }
+
+        return $this->_handleSuccessfulLogin();
+    }
+
+    /**
+     * Ensures that the current user has permission to impersonate the given user.
+     *
+     * @param User $user
+     * @throws ForbiddenHttpException
+     */
+    private function _enforceImpersonatePermission(User $user): void
+    {
+        if (!Craft::$app->getUsers()->canImpersonate(Craft::$app->getUser()->getIdentity(), $user)) {
+            throw new ForbiddenHttpException('You do not have sufficient permissions to impersonate this user');
+        }
     }
 
     /**
@@ -312,7 +408,7 @@ class UsersController extends Controller
 
         if ($this->request->getAcceptsJson()) {
             $return = [
-                'success' => true
+                'success' => true,
             ];
 
             if (Craft::$app->getConfig()->getGeneral()->enableCsrfProtection) {
@@ -420,7 +516,7 @@ class UsersController extends Controller
         }
 
         return $this->asJson([
-            'url' => Craft::$app->getUsers()->getPasswordResetUrl($user)
+            'url' => Craft::$app->getUsers()->getPasswordResetUrl($user),
         ]);
     }
 
@@ -440,7 +536,7 @@ class UsersController extends Controller
             /** @var User $user */
             /** @var string $uid */
             /** @var string $code */
-            list($user, $uid, $code) = $info;
+            [$user, $uid, $code] = $info;
 
             Craft::$app->getUser()->sendUsernameCookie($user);
 
@@ -534,7 +630,7 @@ class UsersController extends Controller
         }
 
         /** @var User $user */
-        list($user) = $info;
+        [$user] = $info;
         $pending = $user->pending;
         $usersService = Craft::$app->getUsers();
 
@@ -542,7 +638,7 @@ class UsersController extends Controller
         if ($user->unverifiedEmail) {
             if (!$usersService->verifyEmailForUser($user)) {
                 return $this->renderTemplate('_special/emailtaken', [
-                    'email' => $user->unverifiedEmail
+                    'email' => $user->unverifiedEmail,
                 ]);
             }
         } else if ($pending) {
@@ -661,19 +757,19 @@ class UsersController extends Controller
                     $statusLabel = Craft::t('app', 'Pending');
                     $statusActions[] = [
                         'action' => 'users/send-activation-email',
-                        'label' => Craft::t('app', 'Send activation email')
+                        'label' => Craft::t('app', 'Send activation email'),
                     ];
                     if ($userSession->checkPermission('administrateUsers')) {
                         // Only need to show the "Copy activation URL" option if they don't have a password
                         if (!$user->password) {
                             $statusActions[] = [
                                 'id' => 'copy-passwordreset-url',
-                                'label' => Craft::t('app', 'Copy activation URL')
+                                'label' => Craft::t('app', 'Copy activation URL'),
                             ];
                         }
                         $statusActions[] = [
                             'action' => 'users/activate-user',
-                            'label' => Craft::t('app', 'Activate account')
+                            'label' => Craft::t('app', 'Activate account'),
                         ];
                     }
                     break;
@@ -682,7 +778,7 @@ class UsersController extends Controller
                     if ($userSession->checkPermission('moderateUsers')) {
                         $statusActions[] = [
                             'action' => 'users/unsuspend-user',
-                            'label' => Craft::t('app', 'Unsuspend')
+                            'label' => Craft::t('app', 'Unsuspend'),
                         ];
                     }
                     break;
@@ -694,13 +790,13 @@ class UsersController extends Controller
                             ($currentUser->admin || !$user->admin) &&
                             $userSession->checkPermission('moderateUsers') &&
                             (
-                                ($previousUserId = Craft::$app->getSession()->get(User::IMPERSONATE_KEY)) === null ||
+                                ($previousUserId = Session::get(User::IMPERSONATE_KEY)) === null ||
                                 $user->id != $previousUserId
                             )
                         ) {
                             $statusActions[] = [
                                 'action' => 'users/unlock-user',
-                                'label' => Craft::t('app', 'Unlock')
+                                'label' => Craft::t('app', 'Unlock'),
                             ];
                         }
                     } else {
@@ -710,12 +806,12 @@ class UsersController extends Controller
                     if (!$isCurrentUser) {
                         $statusActions[] = [
                             'action' => 'users/send-password-reset-email',
-                            'label' => Craft::t('app', 'Send password reset email')
+                            'label' => Craft::t('app', 'Send password reset email'),
                         ];
                         if ($userSession->checkPermission('administrateUsers')) {
                             $statusActions[] = [
                                 'id' => 'copy-passwordreset-url',
-                                'label' => Craft::t('app', 'Copy password reset URL')
+                                'label' => Craft::t('app', 'Copy password reset URL'),
                             ];
                         }
                     }
@@ -726,14 +822,18 @@ class UsersController extends Controller
                 if (Craft::$app->getUsers()->canImpersonate($currentUser, $user)) {
                     $sessionActions[] = [
                         'action' => 'users/impersonate',
-                        'label' => Craft::t('app', 'Login as {user}', ['user' => $user->getName()])
+                        'label' => Craft::t('app', 'Login as {user}', ['user' => $user->getName()]),
+                    ];
+                    $sessionActions[] = [
+                        'id' => 'copy-impersonation-url',
+                        'label' => Craft::t('app', 'Copy impersonation URL'),
                     ];
                 }
 
                 if ($userSession->checkPermission('moderateUsers') && $user->getStatus() != User::STATUS_SUSPENDED) {
                     $destructiveActions[] = [
                         'action' => 'users/suspend-user',
-                        'label' => Craft::t('app', 'Suspend')
+                        'label' => Craft::t('app', 'Suspend'),
                     ];
                 }
             }
@@ -744,7 +844,7 @@ class UsersController extends Controller
                 if (($currentUser && $currentUser->admin) || !$user->admin) {
                     $destructiveActions[] = [
                         'id' => 'delete-btn',
-                        'label' => Craft::t('app', 'Delete…')
+                        'label' => Craft::t('app', 'Delete…'),
                     ];
                 }
             }
@@ -794,7 +894,7 @@ class UsersController extends Controller
             'account' => [
                 'label' => Craft::t('app', 'Account'),
                 'url' => '#account',
-            ]
+            ],
         ];
 
         $tabs += $form->getTabMenu();
@@ -837,7 +937,7 @@ class UsersController extends Controller
                     'newPassword',
                     'currentPassword',
                     'passwordResetRequired',
-                    'preferredLanguage'
+                    'preferredLanguage',
                 ];
 
                 foreach ($errors as $attribute => $error) {
@@ -1167,7 +1267,7 @@ class UsersController extends Controller
 
             // Send the account back to the template
             Craft::$app->getUrlManager()->setRouteParams([
-                $userVariable => $user
+                $userVariable => $user,
             ]);
 
             return null;
@@ -1270,7 +1370,7 @@ class UsersController extends Controller
         if ($this->request->getAcceptsJson()) {
             $return = [
                 'success' => true,
-                'id' => $user->id
+                'id' => $user->id,
             ];
             if ($returnCsrfToken && $generalConfig->enableCsrfProtection) {
                 $return['csrfTokenValue'] = $this->request->getCsrfToken();
@@ -1342,7 +1442,7 @@ class UsersController extends Controller
             Craft::error('There was an error uploading the photo: ' . $exception->getMessage(), __METHOD__);
 
             return $this->asErrorJson(Craft::t('app', 'There was an error uploading your photo: {error}', [
-                'error' => $exception->getMessage()
+                'error' => $exception->getMessage(),
             ]));
         }
     }
@@ -1446,7 +1546,7 @@ class UsersController extends Controller
             }
 
             // And admins can't unlock themselves by impersonating another admin
-            $previousUserId = Craft::$app->getSession()->get(User::IMPERSONATE_KEY);
+            $previousUserId = Session::get(User::IMPERSONATE_KEY);
             if ($previousUserId && $user->id == $previousUserId) {
                 throw new ForbiddenHttpException('You can’t unlock yourself via impersonation.');
             }
@@ -1689,7 +1789,7 @@ class UsersController extends Controller
         if ($this->request->getAcceptsJson()) {
             return $this->asJson([
                 'errorCode' => $authError,
-                'error' => $event->message
+                'error' => $event->message,
             ]);
         }
 
@@ -1724,7 +1824,7 @@ class UsersController extends Controller
         if ($this->request->getAcceptsJson()) {
             $return = [
                 'success' => true,
-                'returnUrl' => $returnUrl
+                'returnUrl' => $returnUrl,
             ];
 
             if (Craft::$app->getConfig()->getGeneral()->enableCsrfProtection) {
@@ -2009,7 +2109,7 @@ class UsersController extends Controller
         $usersService = Craft::$app->getUsers();
         if ($usersService->hasEventHandlers(Users::EVENT_BEFORE_VERIFY_EMAIL)) {
             $usersService->trigger(Users::EVENT_BEFORE_VERIFY_EMAIL, new UserEvent([
-                'user' => $user
+                'user' => $user,
             ]));
         }
 
@@ -2020,7 +2120,7 @@ class UsersController extends Controller
         // Fire an 'afterVerifyUser' event
         if ($usersService->hasEventHandlers(Users::EVENT_AFTER_VERIFY_EMAIL)) {
             $usersService->trigger(Users::EVENT_AFTER_VERIFY_EMAIL, new UserEvent([
-                'user' => $user
+                'user' => $user,
             ]));
         }
 
@@ -2034,6 +2134,10 @@ class UsersController extends Controller
      */
     private function _processInvalidToken(User $user = null): Response
     {
+        $this->trigger(self::EVENT_INVALID_USER_TOKEN, new InvalidUserTokenEvent([
+            'user' => $user,
+        ]));
+
         if ($this->request->getAcceptsJson()) {
             return $this->asErrorJson('InvalidVerificationCode');
         }
@@ -2171,7 +2275,7 @@ class UsersController extends Controller
         }
 
         return $view->renderTemplate('users/_photo', [
-            'user' => $user
+            'user' => $user,
         ], $templateMode);
     }
 }

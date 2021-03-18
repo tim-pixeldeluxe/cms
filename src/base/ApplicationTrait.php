@@ -24,10 +24,12 @@ use craft\events\DefineFieldLayoutFieldsEvent;
 use craft\events\DeleteSiteEvent;
 use craft\events\EditionChangeEvent;
 use craft\events\FieldEvent;
+use craft\fieldlayoutelements\AssetTitleField;
 use craft\fieldlayoutelements\EntryTitleField;
 use craft\fieldlayoutelements\TitleField;
 use craft\helpers\App;
 use craft\helpers\Db;
+use craft\helpers\Session;
 use craft\i18n\Formatter;
 use craft\i18n\I18N;
 use craft\i18n\Locale;
@@ -71,10 +73,11 @@ use yii\web\ServerErrorHttpException;
  * @property-read \craft\db\MigrationManager $contentMigrator The content migration manager
  * @property-read \craft\db\MigrationManager $migrator The application’s migration manager
  * @property-read \craft\feeds\Feeds $feeds The feeds service
+ * @property-read \craft\i18n\Locale $formattingLocale The Locale object that should be used to define the formatter
  * @property-read \craft\i18n\Locale $locale The Locale object for the target language
  * @property-read \craft\mail\Mailer $mailer The mailer component
  * @property-read \craft\services\Api $api The API service
- * @property-read \craft\services\AssetIndexer $assetIndexing The asset indexer service
+ * @property-read \craft\services\AssetIndexer $assetIndexer The asset indexer service
  * @property-read \craft\services\Assets $assets The assets service
  * @property-read \craft\services\AssetTransforms $assetTransforms The asset transforms service
  * @property-read \craft\services\Categories $categories The categories service
@@ -297,6 +300,11 @@ trait ApplicationTrait
         try {
             $info = $this->getInfo(true);
         } catch (DbException $e) {
+            // yii2-redis awkwardly throws yii\db\Exception's rather than their own exception class.
+            if (strpos($e->getMessage(), 'Redis') !== false) {
+                throw $e;
+            }
+
             Craft::error('There was a problem fetching the info row: ' . $e->getMessage(), __METHOD__);
             /** @var ErrorHandler $errorHandler */
             $errorHandler = $this->getErrorHandler();
@@ -362,7 +370,7 @@ trait ApplicationTrait
                         'x' => (new Query)
                             ->select([new Expression('1')])
                             ->from([Table::SITES])
-                            ->limit(2)
+                            ->limit(2),
                     ])
                     ->count() != 1;
         }
@@ -465,7 +473,7 @@ trait ApplicationTrait
         if (!$request->getIsConsoleRequest() && $this->hasEventHandlers(WebApplication::EVENT_AFTER_EDITION_CHANGE)) {
             $this->trigger(WebApplication::EVENT_AFTER_EDITION_CHANGE, new EditionChangeEvent([
                 'oldEdition' => $oldEdition,
-                'newEdition' => $edition
+                'newEdition' => $edition,
             ]));
         }
 
@@ -782,7 +790,7 @@ trait ApplicationTrait
         }
 
         try {
-            $name = $this->getSites()->getPrimarySite()->name;
+            $name = $this->getSites()->getPrimarySite()->getName();
         } catch (SiteNotFoundException $e) {
             $name = null;
         }
@@ -1042,6 +1050,17 @@ trait ApplicationTrait
     {
         /** @var WebApplication|ConsoleApplication $this */
         return $this->get('fields');
+    }
+
+    /**
+     * Returns the locale that should be used to define the formatter.
+     *
+     * @return Locale
+     * @since 3.6.0
+     */
+    public function getFormattingLocale(): Locale
+    {
+        return $this->get('formattingLocale');
     }
 
     /**
@@ -1393,7 +1412,7 @@ trait ApplicationTrait
     {
         // Load the request before anything else, so everything else can safely check Craft::$app->has('request', true)
         // to avoid possible recursive fatal errors in the request initialization
-        $this->getRequest();
+        $request = $this->getRequest();
         $this->getLog();
 
         // Set the timezone
@@ -1401,6 +1420,11 @@ trait ApplicationTrait
 
         // Set the language
         $this->updateTargetLanguage();
+
+        // Prevent browser caching if this is a control panel request
+        if ($request->getIsCpRequest()) {
+            $this->getResponse()->setNoCacheHeaders();
+        }
     }
 
     /**
@@ -1475,9 +1499,12 @@ trait ApplicationTrait
         // If the user is logged in *and* has a primary language set, use that
         if ($this instanceof WebApplication) {
             // Don't actually try to fetch the user, as plugins haven't been loaded yet.
-            $session = $this->getSession();
-            $id = $session->getHasSessionId() || $session->getIsActive() ? $session->get($this->getUser()->idParam) : null;
-            if ($id && ($language = $this->getUsers()->getUserPreference($id, 'language')) !== null) {
+            $id = Session::get($this->getUser()->idParam);
+            if (
+                $id &&
+                ($language = $this->getUsers()->getUserPreference($id, 'language')) !== null &&
+                Craft::$app->getI18n()->validateAppLocaleId($language)
+            ) {
                 return $language;
             }
         }
@@ -1517,6 +1544,8 @@ trait ApplicationTrait
 
             switch ($fieldLayout->type) {
                 case Asset::class:
+                    $event->fields[] = AssetTitleField::class;
+                    break;
                 case Category::class:
                     $event->fields[] = TitleField::class;
                     break;

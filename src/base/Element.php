@@ -98,7 +98,6 @@ use yii\validators\Validator;
  * @property string|null $url The element’s full URL
  * @property-write int|null $revisionCreatorId revision creator ID to be saved
  * @property-write string|null $revisionNotes revision notes to be saved
- * @mixin CustomFieldBehavior
  * @author Pixel & Tonic, Inc. <support@pixelandtonic.com>
  * @since 3.0.0
  */
@@ -504,7 +503,7 @@ abstract class Element extends Component implements ElementInterface
     {
         return [
             self::STATUS_ENABLED => Craft::t('app', 'Enabled'),
-            self::STATUS_DISABLED => Craft::t('app', 'Disabled')
+            self::STATUS_DISABLED => Craft::t('app', 'Disabled'),
         ];
     }
 
@@ -543,7 +542,7 @@ abstract class Element extends Component implements ElementInterface
         // Give plugins a chance to modify them
         $event = new RegisterElementSourcesEvent([
             'context' => $context,
-            'sources' => $sources
+            'sources' => $sources,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_SOURCES, $event);
 
@@ -573,7 +572,7 @@ abstract class Element extends Component implements ElementInterface
         // Give plugins a chance to modify them
         $event = new RegisterElementFieldLayoutsEvent([
             'source' => $source,
-            'fieldLayouts' => $fieldLayouts
+            'fieldLayouts' => $fieldLayouts,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_FIELD_LAYOUTS, $event);
 
@@ -604,7 +603,7 @@ abstract class Element extends Component implements ElementInterface
         // Give plugins a chance to modify them
         $event = new RegisterElementActionsEvent([
             'source' => $source,
-            'actions' => $actions
+            'actions' => $actions,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_ACTIONS, $event);
 
@@ -634,7 +633,7 @@ abstract class Element extends Component implements ElementInterface
         // Give plugins a chance to modify them
         $event = new RegisterElementExportersEvent([
             'source' => $source,
-            'exporters' => $exporters
+            'exporters' => $exporters,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_EXPORTERS, $event);
 
@@ -666,7 +665,7 @@ abstract class Element extends Component implements ElementInterface
 
         // Give plugins a chance to modify them
         $event = new RegisterElementSearchableAttributesEvent([
-            'attributes' => $attributes
+            'attributes' => $attributes,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_SEARCHABLE_ATTRIBUTES, $event);
 
@@ -771,7 +770,7 @@ abstract class Element extends Component implements ElementInterface
 
         // Give plugins a chance to modify them
         $event = new RegisterElementSortOptionsEvent([
-            'sortOptions' => $sortOptions
+            'sortOptions' => $sortOptions,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_SORT_OPTIONS, $event);
 
@@ -806,7 +805,7 @@ abstract class Element extends Component implements ElementInterface
 
         // Give plugins a chance to modify them
         $event = new RegisterElementTableAttributesEvent([
-            'tableAttributes' => $tableAttributes
+            'tableAttributes' => $tableAttributes,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_TABLE_ATTRIBUTES, $event);
 
@@ -834,7 +833,7 @@ abstract class Element extends Component implements ElementInterface
         // Give plugins a chance to modify them
         $event = new RegisterElementDefaultTableAttributesEvent([
             'source' => $source,
-            'tableAttributes' => $tableAttributes
+            'tableAttributes' => $tableAttributes,
         ]);
         Event::trigger(static::class, self::EVENT_REGISTER_DEFAULT_TABLE_ATTRIBUTES, $event);
 
@@ -868,264 +867,20 @@ abstract class Element extends Component implements ElementInterface
         switch ($handle) {
             case 'descendants':
             case 'children':
-                // Get the source element IDs
-                $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
-
-                // Get the structure data for these elements
-                $selectColumns = ['structureId', 'elementId', 'lft', 'rgt'];
-
-                if ($handle === 'children') {
-                    $selectColumns[] = 'level';
-                }
-
-                $elementStructureData = (new Query())
-                    ->select($selectColumns)
-                    ->from([Table::STRUCTUREELEMENTS])
-                    ->where(['elementId' => $sourceElementIds])
-                    ->all();
-
-                if (empty($elementStructureData)) {
-                    return null;
-                }
-
-                // Build the descendant condition & params
-                $condition = ['or'];
-                $params = [];
-
-                foreach ($elementStructureData as $i => $elementStructureDatum) {
-                    $thisElementCondition = [
-                        'and',
-                        ['structureId' => $elementStructureDatum['structureId']],
-                        ['>', 'lft', $elementStructureDatum['lft']],
-                        ['<', 'rgt', $elementStructureDatum['rgt']],
-                    ];
-
-                    if ($handle === 'children') {
-                        $thisElementCondition[] = ['level' => $elementStructureDatum['level'] + 1];
-                    }
-
-                    $condition[] = $thisElementCondition;
-                    $params[":sourceId$i"] = $elementStructureDatum['elementId'];
-                }
-
-                // Fetch the descendant data
-                $descendantStructureQuery = (new Query())
-                    ->select(['structureId', 'lft', 'rgt', 'elementId'])
-                    ->from([Table::STRUCTUREELEMENTS])
-                    ->where($condition)
-                    ->orderBy(['lft' => SORT_ASC]);
-
-                if ($handle === 'children') {
-                    $descendantStructureQuery->addSelect('level');
-                }
-
-                $descendantStructureData = $descendantStructureQuery->all();
-
-                // Map the elements to their descendants
-                $map = [];
-                foreach ($elementStructureData as $elementStructureDatum) {
-                    foreach ($descendantStructureData as $descendantStructureDatum) {
-                        if (
-                            $descendantStructureDatum['structureId'] === $elementStructureDatum['structureId'] &&
-                            $descendantStructureDatum['lft'] > $elementStructureDatum['lft'] &&
-                            $descendantStructureDatum['rgt'] < $elementStructureDatum['rgt'] &&
-                            (
-                                $handle === 'descendants' ||
-                                $descendantStructureDatum['level'] == $elementStructureDatum['level'] + 1
-                            )
-                        ) {
-                            if ($descendantStructureDatum['elementId']) {
-                                $map[] = [
-                                    'source' => $elementStructureDatum['elementId'],
-                                    'target' => $descendantStructureDatum['elementId'],
-                                ];
-                            }
-                        }
-                    }
-                }
-
-                return [
-                    'elementType' => static::class,
-                    'map' => $map
-                ];
-
+                return self::_mapDescendants($sourceElements, $handle === 'children');
             case 'ancestors':
             case 'parent':
-                // Get the source element IDs
-                $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
-
-                // Get the structure data for these elements
-                $selectColumns = ['structureId', 'elementId', 'lft', 'rgt'];
-
-                if ($handle === 'parent') {
-                    $selectColumns[] = 'level';
-                }
-
-                $elementStructureData = (new Query())
-                    ->select($selectColumns)
-                    ->from([Table::STRUCTUREELEMENTS])
-                    ->where(['elementId' => $sourceElementIds])
-                    ->all();
-
-                if (empty($elementStructureData)) {
-                    return null;
-                }
-
-                // Build the ancestor condition & params
-                $condition = ['or'];
-                $params = [];
-
-                foreach ($elementStructureData as $i => $elementStructureDatum) {
-                    $thisElementCondition = [
-                        'and',
-                        ['structureId' => $elementStructureDatum['structureId']],
-                        ['<', 'lft', $elementStructureDatum['lft']],
-                        ['>', 'rgt', $elementStructureDatum['rgt']],
-                    ];
-
-                    if ($handle === 'parent') {
-                        $thisElementCondition[] = ['level' => $elementStructureDatum['level'] - 1];
-                    }
-
-                    $condition[] = $thisElementCondition;
-                    $params[":sourceId$i"] = $elementStructureDatum['elementId'];
-                }
-
-                // Fetch the ancestor data
-                $ancestorStructureQuery = (new Query())
-                    ->select(['structureId', 'lft', 'rgt', 'elementId'])
-                    ->from([Table::STRUCTUREELEMENTS])
-                    ->where($condition)
-                    ->orderBy(['lft' => SORT_ASC]);
-
-                if ($handle === 'parent') {
-                    $ancestorStructureQuery->addSelect('level');
-                }
-
-                $ancestorStructureData = $ancestorStructureQuery->all();
-
-                // Map the elements to their ancestors
-                $map = [];
-                foreach ($elementStructureData as $elementStructureDatum) {
-                    foreach ($ancestorStructureData as $ancestorStructureDatum) {
-                        if (
-                            $ancestorStructureDatum['structureId'] === $elementStructureDatum['structureId'] &&
-                            $ancestorStructureDatum['lft'] < $elementStructureDatum['lft'] &&
-                            $ancestorStructureDatum['rgt'] > $elementStructureDatum['rgt'] &&
-                            (
-                                $handle === 'ancestors' ||
-                                $ancestorStructureDatum['level'] == $elementStructureDatum['level'] - 1
-                            )
-                        ) {
-                            if ($ancestorStructureDatum['elementId']) {
-                                $map[] = [
-                                    'source' => $elementStructureDatum['elementId'],
-                                    'target' => $ancestorStructureDatum['elementId'],
-                                ];
-                            }
-
-                            // If we're just fetching the parents, then we're done with this element
-                            if ($handle === 'parent') {
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                return [
-                    'elementType' => static::class,
-                    'map' => $map
-                ];
-
+                return self::_mapAncestors($sourceElements, $handle === 'parent');
             case 'localized':
-                $sourceSiteId = $sourceElements[0]->siteId;
-                $otherSiteIds = [];
-                foreach (Craft::$app->getSites()->getAllSites() as $site) {
-                    if ($site->id != $sourceSiteId) {
-                        $otherSiteIds[] = $site->id;
-                    }
-                }
-
-                // Map the source elements to themselves
-                $map = [];
-                if (!empty($otherSiteIds)) {
-                    foreach ($sourceElements as $element) {
-                        $map[] = [
-                            'source' => $element->id,
-                            'target' => $element->id,
-                        ];
-                    }
-                }
-
-                return [
-                    'elementType' => static::class,
-                    'map' => $map,
-                    'criteria' => [
-                        'siteId' => $otherSiteIds,
-                    ]
-                ];
-
+                return self::_mapLocalized($sourceElements);
             case 'currentRevision':
-                // Get the source element IDs
-                $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
-
-                $map = (new Query)
-                    ->select([
-                        'source' => 'se.id',
-                        'target' => 're.id',
-                    ])
-                    ->from(['re' => Table::ELEMENTS])
-                    ->innerJoin(['r' => Table::REVISIONS], '[[r.id]] = [[re.revisionId]]')
-                    ->innerJoin(['se' => Table::ELEMENTS], '[[se.id]] = [[r.sourceId]]')
-                    ->where('[[re.dateCreated]] = [[se.dateUpdated]]')
-                    ->andWhere(['se.id' => $sourceElementIds])
-                    ->all();
-
-                return [
-                    'elementType' => static::class,
-                    'map' => $map,
-                    'criteria' => ['revisions' => true],
-                ];
-
+                return self::_mapCurrentRevisions($sourceElements);
+            case 'drafts':
+                return self::_mapDrafts($sourceElements);
             case 'draftCreator':
-                // Get the source element IDs
-                $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
-
-                $map = (new Query())
-                    ->select([
-                        'source' => 'e.id',
-                        'target' => 'd.creatorId',
-                    ])
-                    ->from(['e' => Table::ELEMENTS])
-                    ->innerJoin(['d' => Table::DRAFTS], '[[d.id]] = [[e.draftId]]')
-                    ->where(['e.id' => $sourceElementIds])
-                    ->andWhere(['not', ['d.creatorId' => null]])
-                    ->all();
-
-                return [
-                    'elementType' => User::class,
-                    'map' => $map,
-                ];
-
+                return self::_mapDraftCreators($sourceElements);
             case 'revisionCreator':
-                // Get the source element IDs
-                $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
-
-                $map = (new Query())
-                    ->select([
-                        'source' => 'e.id',
-                        'target' => 'r.creatorId',
-                    ])
-                    ->from(['e' => Table::ELEMENTS])
-                    ->innerJoin(['r' => Table::REVISIONS], '[[r.id]] = [[e.revisionId]]')
-                    ->where(['e.id' => $sourceElementIds])
-                    ->andWhere(['not', ['r.creatorId' => null]])
-                    ->all();
-
-                return [
-                    'elementType' => User::class,
-                    'map' => $map,
-                ];
+                return self::_mapRevisionCreators($sourceElements);
         }
 
         // Is $handle a custom field handle?
@@ -1138,7 +893,7 @@ abstract class Element extends Component implements ElementInterface
         // Give plugins a chance to provide custom mappings
         $event = new DefineEagerLoadingMapEvent([
             'sourceElements' => $sourceElements,
-            'handle' => $handle
+            'handle' => $handle,
         ]);
         Event::trigger(static::class, self::EVENT_DEFINE_EAGER_LOADING_MAP, $event);
         if ($event->elementType !== null) {
@@ -1150,6 +905,337 @@ abstract class Element extends Component implements ElementInterface
         }
 
         return false;
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements’ descendants.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @param bool $children Whether only direct children should be included
+     * @return array|null The eager-loading element ID mappings, or null if the result should be ignored
+     */
+    private static function _mapDescendants(array $sourceElements, bool $children): ?array
+    {
+        // Get the source element IDs
+        $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
+
+        // Get the structure data for these elements
+        $selectColumns = ['structureId', 'elementId', 'lft', 'rgt'];
+
+        if ($children) {
+            $selectColumns[] = 'level';
+        }
+
+        $elementStructureData = (new Query())
+            ->select($selectColumns)
+            ->from([Table::STRUCTUREELEMENTS])
+            ->where(['elementId' => $sourceElementIds])
+            ->all();
+
+        if (empty($elementStructureData)) {
+            return null;
+        }
+
+        // Build the descendant condition & params
+        $condition = ['or'];
+        $params = [];
+
+        foreach ($elementStructureData as $i => $elementStructureDatum) {
+            $thisElementCondition = [
+                'and',
+                ['structureId' => $elementStructureDatum['structureId']],
+                ['>', 'lft', $elementStructureDatum['lft']],
+                ['<', 'rgt', $elementStructureDatum['rgt']],
+            ];
+
+            if ($children) {
+                $thisElementCondition[] = ['level' => $elementStructureDatum['level'] + 1];
+            }
+
+            $condition[] = $thisElementCondition;
+            $params[":sourceId$i"] = $elementStructureDatum['elementId'];
+        }
+
+        // Fetch the descendant data
+        $descendantStructureQuery = (new Query())
+            ->select(['structureId', 'lft', 'rgt', 'elementId'])
+            ->from([Table::STRUCTUREELEMENTS])
+            ->where($condition)
+            ->orderBy(['lft' => SORT_ASC]);
+
+        if ($children) {
+            $descendantStructureQuery->addSelect('level');
+        }
+
+        $descendantStructureData = $descendantStructureQuery->all();
+
+        // Map the elements to their descendants
+        $map = [];
+        foreach ($elementStructureData as $elementStructureDatum) {
+            foreach ($descendantStructureData as $descendantStructureDatum) {
+                if (
+                    $descendantStructureDatum['structureId'] === $elementStructureDatum['structureId'] &&
+                    $descendantStructureDatum['lft'] > $elementStructureDatum['lft'] &&
+                    $descendantStructureDatum['rgt'] < $elementStructureDatum['rgt'] &&
+                    (!$children || $descendantStructureDatum['level'] == $elementStructureDatum['level'] + 1)
+                ) {
+                    if ($descendantStructureDatum['elementId']) {
+                        $map[] = [
+                            'source' => $elementStructureDatum['elementId'],
+                            'target' => $descendantStructureDatum['elementId'],
+                        ];
+                    }
+                }
+            }
+        }
+
+        return [
+            'elementType' => static::class,
+            'map' => $map,
+        ];
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements’ ancestors.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @param bool $parents Whether only direct parents should be included
+     * @return array|null The eager-loading element ID mappings, or null if the result should be ignored
+     */
+    private static function _mapAncestors(array $sourceElements, bool $parents): ?array
+    {
+        // Get the source element IDs
+        $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
+
+        // Get the structure data for these elements
+        $selectColumns = ['structureId', 'elementId', 'lft', 'rgt'];
+
+        if ($parents) {
+            $selectColumns[] = 'level';
+        }
+
+        $elementStructureData = (new Query())
+            ->select($selectColumns)
+            ->from([Table::STRUCTUREELEMENTS])
+            ->where(['elementId' => $sourceElementIds])
+            ->all();
+
+        if (empty($elementStructureData)) {
+            return null;
+        }
+
+        // Build the ancestor condition & params
+        $condition = ['or'];
+        $params = [];
+
+        foreach ($elementStructureData as $i => $elementStructureDatum) {
+            $thisElementCondition = [
+                'and',
+                ['structureId' => $elementStructureDatum['structureId']],
+                ['<', 'lft', $elementStructureDatum['lft']],
+                ['>', 'rgt', $elementStructureDatum['rgt']],
+            ];
+
+            if ($parents) {
+                $thisElementCondition[] = ['level' => $elementStructureDatum['level'] - 1];
+            }
+
+            $condition[] = $thisElementCondition;
+            $params[":sourceId$i"] = $elementStructureDatum['elementId'];
+        }
+
+        // Fetch the ancestor data
+        $ancestorStructureQuery = (new Query())
+            ->select(['structureId', 'lft', 'rgt', 'elementId'])
+            ->from([Table::STRUCTUREELEMENTS])
+            ->where($condition)
+            ->orderBy(['lft' => SORT_ASC]);
+
+        if ($parents) {
+            $ancestorStructureQuery->addSelect('level');
+        }
+
+        $ancestorStructureData = $ancestorStructureQuery->all();
+
+        // Map the elements to their ancestors
+        $map = [];
+        foreach ($elementStructureData as $elementStructureDatum) {
+            foreach ($ancestorStructureData as $ancestorStructureDatum) {
+                if (
+                    $ancestorStructureDatum['structureId'] === $elementStructureDatum['structureId'] &&
+                    $ancestorStructureDatum['lft'] < $elementStructureDatum['lft'] &&
+                    $ancestorStructureDatum['rgt'] > $elementStructureDatum['rgt'] &&
+                    (!$parents || $ancestorStructureDatum['level'] == $elementStructureDatum['level'] - 1)
+                ) {
+                    if ($ancestorStructureDatum['elementId']) {
+                        $map[] = [
+                            'source' => $elementStructureDatum['elementId'],
+                            'target' => $ancestorStructureDatum['elementId'],
+                        ];
+                    }
+
+                    // If we're just fetching the parents, then we're done with this element
+                    if ($parents) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return [
+            'elementType' => static::class,
+            'map' => $map,
+        ];
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements in other locales.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @return array The eager-loading element ID mappings
+     */
+    private static function _mapLocalized(array $sourceElements): array
+    {
+        $sourceSiteId = $sourceElements[0]->siteId;
+        $otherSiteIds = [];
+        foreach (Craft::$app->getSites()->getAllSites() as $site) {
+            if ($site->id != $sourceSiteId) {
+                $otherSiteIds[] = $site->id;
+            }
+        }
+
+        // Map the source elements to themselves
+        $map = [];
+        if (!empty($otherSiteIds)) {
+            foreach ($sourceElements as $element) {
+                $map[] = [
+                    'source' => $element->id,
+                    'target' => $element->id,
+                ];
+            }
+        }
+
+        return [
+            'elementType' => static::class,
+            'map' => $map,
+            'criteria' => [
+                'siteId' => $otherSiteIds,
+            ],
+        ];
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements’ current revisions.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @return array The eager-loading element ID mappings
+     */
+    private static function _mapCurrentRevisions(array $sourceElements): array
+    {
+        // Get the source element IDs
+        $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
+
+        $map = (new Query)
+            ->select([
+                'source' => 'se.id',
+                'target' => 're.id',
+            ])
+            ->from(['re' => Table::ELEMENTS])
+            ->innerJoin(['r' => Table::REVISIONS], '[[r.id]] = [[re.revisionId]]')
+            ->innerJoin(['se' => Table::ELEMENTS], '[[se.id]] = [[r.sourceId]]')
+            ->where('[[re.dateCreated]] = [[se.dateUpdated]]')
+            ->andWhere(['se.id' => $sourceElementIds])
+            ->all();
+
+        return [
+            'elementType' => static::class,
+            'map' => $map,
+            'criteria' => ['revisions' => true],
+        ];
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements’ current revisions.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @return array The eager-loading element ID mappings
+     */
+    private static function _mapDrafts(array $sourceElements): array
+    {
+        // Get the source element IDs
+        $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
+
+        $map = (new Query())
+            ->select([
+                'source' => 'd.sourceId',
+                'target' => 'e.id',
+            ])
+            ->from(['d' => Table::DRAFTS])
+            ->innerJoin(['e' => Table::ELEMENTS], '[[e.draftId]] = [[d.id]]')
+            ->where(['d.sourceId' => $sourceElementIds])
+            ->all();
+
+        return [
+            'elementType' => static::class,
+            'map' => $map,
+            'criteria' => ['drafts' => true],
+        ];
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements’ draft creators.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @return array The eager-loading element ID mappings
+     */
+    private static function _mapDraftCreators(array $sourceElements): array
+    {
+        // Get the source element IDs
+        $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
+
+        $map = (new Query())
+            ->select([
+                'source' => 'e.id',
+                'target' => 'd.creatorId',
+            ])
+            ->from(['e' => Table::ELEMENTS])
+            ->innerJoin(['d' => Table::DRAFTS], '[[d.id]] = [[e.draftId]]')
+            ->where(['e.id' => $sourceElementIds])
+            ->andWhere(['not', ['d.creatorId' => null]])
+            ->all();
+
+        return [
+            'elementType' => User::class,
+            'map' => $map,
+        ];
+    }
+
+    /**
+     * Returns an eager-loading map for the source elements’ revision creators.
+     *
+     * @param ElementInterface[] $sourceElements An array of the source elements
+     * @return array The eager-loading element ID mappings
+     */
+    private static function _mapRevisionCreators(array $sourceElements): array
+    {
+        // Get the source element IDs
+        $sourceElementIds = ArrayHelper::getColumn($sourceElements, 'id');
+
+        $map = (new Query())
+            ->select([
+                'source' => 'e.id',
+                'target' => 'r.creatorId',
+            ])
+            ->from(['e' => Table::ELEMENTS])
+            ->innerJoin(['r' => Table::REVISIONS], '[[r.id]] = [[e.revisionId]]')
+            ->where(['e.id' => $sourceElementIds])
+            ->andWhere(['not', ['r.creatorId' => null]])
+            ->all();
+
+        return [
+            'elementType' => User::class,
+            'map' => $map,
+        ];
     }
 
     /**
@@ -1366,6 +1452,13 @@ abstract class Element extends Component implements ElementInterface
      * @see setEnabledForSite()
      */
     private $_enabledForSite = true;
+
+    /**
+     * @var string|null
+     * @see getUiLabel()
+     * @see setUiLabel()
+     */
+    private $_uiLabel;
 
     /**
      * @inheritdoc
@@ -1744,7 +1837,7 @@ abstract class Element extends Component implements ElementInterface
     public function validateCustomFieldAttribute(string $attribute, array $params = null)
     {
         /** @var array|null $params */
-        list($field, $method, $fieldParams) = $params;
+        [$field, $method, $fieldParams] = $params;
 
         if (is_string($method)) {
             $method = [$field, $method];
@@ -1875,6 +1968,18 @@ abstract class Element extends Component implements ElementInterface
 
     /**
      * @inheritdoc
+     */
+    public function getIsUnpublishedDraft(): bool
+    {
+        return $this->getIsUnsavedDraft();
+    }
+
+    /**
+     * Returns whether the element is an unpublished draft.
+     *
+     * @return bool
+     * @since 3.2.0
+     * @deprecated in 3.6.0. Use [[getIsUnpublishedDraft()]] instead.
      */
     public function getIsUnsavedDraft(): bool
     {
@@ -2025,7 +2130,26 @@ abstract class Element extends Component implements ElementInterface
      */
     public function getUiLabel(): string
     {
-        return (string)$this;
+        return $this->_uiLabel ?? $this->uiLabel() ?? (string)$this;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function setUiLabel(?string $label): void
+    {
+        $this->_uiLabel = $label;
+    }
+
+    /**
+     * Returns what the element should be called within the control panel.
+     *
+     * @return string|null
+     * @since 3.6.4
+     */
+    protected function uiLabel(): ?string
+    {
+        return null;
     }
 
     /**
@@ -2538,14 +2662,14 @@ abstract class Element extends Component implements ElementInterface
             return [
                 self::ATTR_STATUS_OUTDATED, Craft::t('app', 'Modified in source {type}', [
                     'type' => static::lowerDisplayName(),
-                ])
+                ]),
             ];
         }
         if ($outdated && $modified) {
             return [
                 self::ATTR_STATUS_CONFLICTED, Craft::t('app', 'Modified in draft and source {type}', [
                     'type' => static::lowerDisplayName(),
-                ])
+                ]),
             ];
         }
         return null;
@@ -2697,14 +2821,14 @@ abstract class Element extends Component implements ElementInterface
             return [
                 self::ATTR_STATUS_OUTDATED, Craft::t('app', 'Modified in source {type}', [
                     'type' => static::lowerDisplayName(),
-                ])
+                ]),
             ];
         }
         if ($outdated && $modified) {
             return [
                 self::ATTR_STATUS_CONFLICTED, Craft::t('app', 'Modified in draft and source {type}', [
                     'type' => static::lowerDisplayName(),
-                ])
+                ]),
             ];
         }
         return null;
@@ -2964,7 +3088,7 @@ abstract class Element extends Component implements ElementInterface
 
         // Give plugins a chance to modify them
         $event = new RegisterElementHtmlAttributesEvent([
-            'htmlAttributes' => $htmlAttributes
+            'htmlAttributes' => $htmlAttributes,
         ]);
         $this->trigger(self::EVENT_REGISTER_HTML_ATTRIBUTES, $event);
 
@@ -2990,7 +3114,7 @@ abstract class Element extends Component implements ElementInterface
     {
         // Give plugins a chance to set this
         $event = new SetElementTableAttributeHtmlEvent([
-            'attribute' => $attribute
+            'attribute' => $attribute,
         ]);
         $this->trigger(self::EVENT_SET_TABLE_ATTRIBUTE_HTML, $event);
 
@@ -3039,6 +3163,10 @@ abstract class Element extends Component implements ElementInterface
     {
         switch ($attribute) {
             case 'link':
+                if (ElementHelper::isDraftOrRevision($this)) {
+                    return '';
+                }
+
                 $url = $this->getUrl();
 
                 if ($url !== null) {
@@ -3053,6 +3181,10 @@ abstract class Element extends Component implements ElementInterface
                 return '';
 
             case 'uri':
+                if ($this->getIsDraft() && ElementHelper::isTempSlug($this->slug)) {
+                    return '';
+                }
+
                 $url = $this->getUrl();
 
                 if ($url !== null) {
@@ -3087,6 +3219,13 @@ abstract class Element extends Component implements ElementInterface
 
                 return '';
 
+            case 'slug':
+                if ($this->getIsDraft() && ElementHelper::isTempSlug($this->slug)) {
+                    return '';
+                }
+
+                return Html::encode($this->slug);
+
             default:
                 // Is this a custom field?
                 if (preg_match('/^field:(\d+)$/', $attribute, $matches)) {
@@ -3119,7 +3258,7 @@ abstract class Element extends Component implements ElementInterface
                 if ($value instanceof DateTime) {
                     $formatter = Craft::$app->getFormatter();
                     return Html::tag('span', $formatter->asTimestamp($value, Locale::LENGTH_SHORT), [
-                        'title' => $formatter->asDatetime($value, Locale::LENGTH_SHORT)
+                        'title' => $formatter->asDatetime($value, Locale::LENGTH_SHORT),
                     ]);
                 }
 

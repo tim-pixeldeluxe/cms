@@ -12,6 +12,7 @@ use craft\base\ElementInterface;
 use craft\base\Field;
 use craft\base\PreviewableFieldInterface;
 use craft\fields\data\ColorData;
+use craft\helpers\Cp;
 use craft\helpers\Html;
 use craft\validators\ColorValidator;
 use yii\db\Schema;
@@ -56,14 +57,12 @@ class Color extends Field implements PreviewableFieldInterface
     /** @inheritdoc */
     public function getSettingsHtml()
     {
-        return Craft::$app->getView()->renderTemplateMacro('_includes/forms.html', 'colorField', [
-            [
-                'label' => Craft::t('app', 'Default Color'),
-                'id' => 'default-color',
-                'name' => 'defaultColor',
-                'value' => $this->defaultColor,
-                'errors' => $this->getErrors('defaultColor'),
-            ]
+        return Cp::colorFieldHtml([
+            'label' => Craft::t('app', 'Default Color'),
+            'id' => 'default-color',
+            'name' => 'defaultColor',
+            'value' => $this->defaultColor,
+            'errors' => $this->getErrors('defaultColor'),
         ]);
     }
 
@@ -115,8 +114,10 @@ class Color extends Field implements PreviewableFieldInterface
     protected function inputHtml($value, ElementInterface $element = null): string
     {
         /** @var ColorData|null $value */
+        $id = Html::id($this->handle);
         return Craft::$app->getView()->renderTemplate('_includes/forms/color', [
-            'id' => Html::id($this->handle),
+            'id' => $id,
+            'instructionsId' => "$id-instructions",
             'name' => $this->handle,
             'value' => $value ? $value->getHex() : null,
         ]);
@@ -135,7 +136,7 @@ class Color extends Field implements PreviewableFieldInterface
         return Html::encodeParams(
             '<div class="color" style="cursor: default;"><div class="color-preview" style="background-color: {bgColor};"></div></div><div class="colorhex code">{bgColor}</div>',
             [
-                'bgColor' => $value->getHex()
+                'bgColor' => $value->getHex(),
             ]);
     }
 

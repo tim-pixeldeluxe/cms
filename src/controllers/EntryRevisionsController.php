@@ -95,13 +95,13 @@ class EntryRevisionsController extends BaseEntriesController
 
         // Type
         if (($typeHandle = $this->request->getQueryParam('type')) !== null) {
-            $type = ArrayHelper::firstWhere($section->getEntryTypes(), 'handle', $typeHandle);
+            $type = ArrayHelper::firstWhere($entry->getAvailableEntryTypes(), 'handle', $typeHandle);
             if ($type === null) {
                 throw new BadRequestHttpException("Invalid entry type handle: $typeHandle");
             }
             $entry->typeId = $type->id;
         } else {
-            $entry->typeId = $this->request->getQueryParam('typeId') ?? $section->getEntryTypes()[0]->id;
+            $entry->typeId = $this->request->getQueryParam('typeId') ?? $entry->getAvailableEntryTypes()[0]->id;
         }
 
         // Status
@@ -164,7 +164,7 @@ class EntryRevisionsController extends BaseEntriesController
 
         // Save it and redirect to its edit page
         $entry->setScenario(Element::SCENARIO_ESSENTIALS);
-        if (!Craft::$app->getDrafts()->saveElementAsDraft($entry, Craft::$app->getUser()->getId())) {
+        if (!Craft::$app->getDrafts()->saveElementAsDraft($entry, Craft::$app->getUser()->getId(), null, null, false)) {
             throw new Exception('Unable to save entry as a draft: ' . implode(', ', $entry->getErrorSummary(true)));
         }
 
@@ -255,14 +255,9 @@ class EntryRevisionsController extends BaseEntriesController
             $draft->setFieldValuesFromRequest($fieldsLocation);
             $draft->updateTitle();
 
-            // Draft meta
-            /** @var Entry|DraftBehavior $draft */
-            $draft->draftName = $this->request->getBodyParam('draftName') ?? $draft->draftName;
-            $draft->draftNotes = $this->request->getBodyParam('draftNotes') ?? $draft->draftNotes;
-
             $draft->setScenario(Element::SCENARIO_ESSENTIALS);
 
-            if ($draft->getIsUnsavedDraft() && $this->request->getBodyParam('propagateAll')) {
+            if ($draft->getIsUnpublishedDraft() && $this->request->getBodyParam('propagateAll')) {
                 $draft->propagateAll = true;
             }
 
@@ -325,7 +320,7 @@ class EntryRevisionsController extends BaseEntriesController
 
         $draftId = $this->request->getBodyParam('draftId');
 
-        /** @var ElementInterface|DraftBehavior $draft */
+        /** @var Entry|DraftBehavior $draft */
         $draft = Entry::find()
             ->draftId($draftId)
             ->siteId('*')
@@ -336,9 +331,7 @@ class EntryRevisionsController extends BaseEntriesController
             throw new NotFoundHttpException('Draft not found');
         }
 
-        if (!$draft->creatorId || $draft->creatorId != Craft::$app->getUser()->getIdentity()->id) {
-            $this->requirePermission('deletePeerEntryDrafts:' . $draft->getSection()->uid);
-        }
+        $this->enforceDeleteEntryPermissions($draft);
 
         Craft::$app->getElements()->deleteElement($draft, true);
 
@@ -350,7 +343,7 @@ class EntryRevisionsController extends BaseEntriesController
             ]);
         }
 
-        return $this->redirectToPostedUrl();
+        return $this->redirectToPostedUrl($draft);
     }
 
     /**
@@ -417,7 +410,7 @@ class EntryRevisionsController extends BaseEntriesController
 
         // Even more permission enforcement
         if ($draft->enabled && !Craft::$app->getUser()->checkPermission("publishEntries:{$section->uid}")) {
-            if ($draft->getIsUnsavedDraft()) {
+            if ($draft->getIsUnpublishedDraft()) {
                 // Just disable it
                 $draft->enabled = false;
             } else {
@@ -435,7 +428,7 @@ class EntryRevisionsController extends BaseEntriesController
             $draft->setScenario(Element::SCENARIO_LIVE);
         }
 
-        if ($draft->getIsUnsavedDraft() && $this->request->getBodyParam('propagateAll')) {
+        if ($draft->getIsUnpublishedDraft() && $this->request->getBodyParam('propagateAll')) {
             $draft->propagateAll = true;
         }
 
@@ -445,13 +438,13 @@ class EntryRevisionsController extends BaseEntriesController
             }
 
             // Publish the draft (finally!)
-            $newEntry = Craft::$app->getDrafts()->applyDraft($draft);
+            $newEntry = Craft::$app->getDrafts()->publishDraft($draft);
         } catch (InvalidElementException $e) {
             $this->setFailFlash(Craft::t('app', 'Couldn’t publish draft.'));
 
             // Send the draft back to the template
             Craft::$app->getUrlManager()->setRouteParams([
-                'entry' => $draft
+                'entry' => $draft,
             ]);
             return null;
         }
@@ -462,7 +455,7 @@ class EntryRevisionsController extends BaseEntriesController
             ]);
         }
 
-        $this->setSuccessFlash(Craft::t('app', 'Entry saved.'));
+        $this->setSuccessFlash(Craft::t('app', 'Draft published.'));
         return $this->redirectToPostedUrl($newEntry);
     }
 
@@ -552,7 +545,7 @@ class EntryRevisionsController extends BaseEntriesController
 
         if (!$draft->typeId) {
             // Default to the section's first entry type
-            $draft->typeId = $draft->getSection()->getEntryTypes()[0]->id;
+            $draft->typeId = $draft->getAvailableEntryTypes()[0]->id;
             // Prevent the last entry type's field layout from being used
             $draft->fieldLayoutId = null;
         }
@@ -567,12 +560,16 @@ class EntryRevisionsController extends BaseEntriesController
         $draft->authorId = $authorId;
 
         // Parent
-        $parentId = $this->request->getBodyParam('parentId');
-
-        if (is_array($parentId)) {
-            $parentId = $parentId[0] ?? null;
+        if (($parentId = $this->request->getBodyParam('parentId')) !== null) {
+            if (is_array($parentId)) {
+                $parentId = reset($parentId) ?: false;
+            }
+            $draft->newParentId = $parentId ?: false;
         }
 
-        $draft->newParentId = $parentId ?: null;
+        // Draft meta
+        /** @var Entry|DraftBehavior $draft */
+        $draft->draftName = $this->request->getBodyParam('draftName') ?? $draft->draftName;
+        $draft->draftNotes = $this->request->getBodyParam('notes') ?? $draft->draftNotes;
     }
 }

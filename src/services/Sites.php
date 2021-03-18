@@ -400,7 +400,7 @@ class Sites extends Component
         // Fire a 'beforeDeleteSiteGroup' event
         if ($this->hasEventHandlers(self::EVENT_BEFORE_DELETE_SITE_GROUP)) {
             $this->trigger(self::EVENT_BEFORE_DELETE_SITE_GROUP, new SiteGroupEvent([
-                'group' => $group
+                'group' => $group,
             ]));
         }
 
@@ -653,9 +653,9 @@ class Sites extends Component
         $isNewSite = !$site->id;
 
         if (!empty($this->_allSitesById)) {
-            $oldPrimarySiteId = $this->getPrimarySite()->id;
+            $primarySite = $this->getPrimarySite();
         } else {
-            $oldPrimarySiteId = null;
+            $primarySite = null;
         }
 
         // Fire a 'beforeSaveSite' event
@@ -663,7 +663,7 @@ class Sites extends Component
             $this->trigger(self::EVENT_BEFORE_SAVE_SITE, new SiteEvent([
                 'site' => $site,
                 'isNew' => $isNewSite,
-                'oldPrimarySiteId' => $oldPrimarySiteId,
+                'oldPrimarySiteId' => $primarySite->id,
             ]));
         }
 
@@ -682,13 +682,25 @@ class Sites extends Component
             $site->uid = Db::uidById(Table::SITES, $site->id);
         }
 
-        $configPath = self::CONFIG_SITES_KEY . '.' . $site->uid;
-        $configData = $site->getConfig();
-        Craft::$app->getProjectConfig()->set($configPath, $configData, "Save the “{$site->handle}” site");
+        $projectConfigService = Craft::$app->getProjectConfig();
+        $projectConfigService->set(
+            self::CONFIG_SITES_KEY . ".$site->uid",
+            $site->getConfig(),
+            "Save the “{$site->handle}” site"
+        );
 
         // Now that we have a site ID, save it on the model
         if ($isNewSite) {
             $site->id = Db::idByUid(Table::SITES, $site->uid);
+        }
+
+        // If this just became the new primary site, update the old primary site's config
+        if ($site->primary && $primarySite && $site->id != $primarySite->id) {
+            $projectConfigService->set(
+                self::CONFIG_SITES_KEY . ".$primarySite->uid.primary",
+                false,
+                "Set the “{$primarySite->handle}” site not be primary"
+            );
         }
 
         return true;
@@ -1207,6 +1219,7 @@ class Sites extends Component
                 if ($site->primary) {
                     $this->_primarySite = $site;
 
+                    // todo: remove in Craft 4
                     if (is_string($generalConfig->siteName)) {
                         $site->overrideName($generalConfig->siteName);
                     }
@@ -1215,6 +1228,7 @@ class Sites extends Component
                     }
                 }
 
+                // todo: remove in Craft 4
                 if (is_array($generalConfig->siteName) && isset($generalConfig->siteName[$site->handle])) {
                     $site->overrideName($generalConfig->siteName[$site->handle]);
                 }
@@ -1346,7 +1360,7 @@ class Sites extends Component
                     $deleteCondition = [
                         'and',
                         ['elementId' => $elementIds],
-                        ['not', ['siteId' => $oldPrimarySiteId]]
+                        ['not', ['siteId' => $oldPrimarySiteId]],
                     ];
 
                     Db::delete(Table::ELEMENTS_SITES, $deleteCondition);

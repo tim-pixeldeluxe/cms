@@ -129,12 +129,12 @@ class InstallController extends Controller
         if (!$dbConfig->port) {
             // Only possible if it was not numeric
             $errors['port'][] = Craft::t('yii', '{attribute} must be an integer.', [
-                'attribute' => Craft::t('app', 'Port')
+                'attribute' => Craft::t('app', 'Port'),
             ]);
         }
         if (!$dbConfig->database) {
             $errors['database'][] = Craft::t('yii', '{attribute} cannot be blank.', [
-                'attribute' => Craft::t('app', 'Database Name')
+                'attribute' => Craft::t('app', 'Database Name'),
             ]);
         }
         if (strlen(StringHelper::ensureRight($dbConfig->tablePrefix, '_')) > 6) {
@@ -208,10 +208,11 @@ class InstallController extends Controller
         $this->requirePostRequest();
         $this->requireAcceptsJson();
 
-        $site = new Site();
-        $site->name = $this->request->getBodyParam('name');
-        $site->baseUrl = $this->request->getBodyParam('baseUrl');
-        $site->language = $this->request->getBodyParam('language');
+        $site = new Site([
+            'name' => $this->request->getBodyParam('name'),
+            'baseUrl' => $this->request->getBodyParam('baseUrl'),
+            'language' => $this->request->getBodyParam('language'),
+        ]);
 
         $validates = $site->validate(['name', 'baseUrl', 'language']);
         $errors = $site->getErrors();
